@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { defaultVaultPath, errorMessage, vaultCreate, vaultExists, vaultUnlock } from "../api";
 import type { VaultRecord } from "../types";
+import logo from "../assets/clavium-logo.png";
 
 interface Props {
   onUnlocked: (records: VaultRecord[]) => void;
@@ -79,7 +80,7 @@ export default function UnlockScreen({ onUnlocked }: Props) {
     <div className="unlock-wrap">
       <div className="clv-card unlock-card">
         <div className="unlock-brand">
-          <ClaviumMark />
+          <img src={logo} alt="" width="34" height="34" className="unlock-brand-mark" />
           <div>
             <div className="unlock-brand-name">Clavium</div>
             <div className="unlock-brand-sub">
@@ -136,24 +137,5 @@ export default function UnlockScreen({ onUnlocked }: Props) {
         )}
       </div>
     </div>
-  );
-}
-
-function ClaviumMark() {
-  return (
-    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="11" stroke="var(--clv-gold-400)" strokeWidth="1.2" />
-      <path
-        d="M9 12.5a3 3 0 1 1 1.2 2.4M9 12.5a3 3 0 1 1 1.2-2.4"
-        stroke="var(--clv-blue-300)"
-        strokeWidth="1.4"
-      />
-      <path
-        d="M10.5 12.5H17M14.5 12.5V15M17 12.5V15"
-        stroke="var(--clv-gold-400)"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }

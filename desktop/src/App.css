@@ -91,14 +91,6 @@
   letter-spacing: 0.01em;
 }
 
-.vault-brand-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--clv-gold-400);
-  box-shadow: 0 0 8px var(--clv-gold-400);
-}
-
 .vault-add-btn {
   width: 100%;
 }

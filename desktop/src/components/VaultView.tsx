@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { errorMessage, vaultAddRecord, vaultDeleteRecord, vaultUpdateRecord } from "../api";
 import type { RecordInput, VaultRecord } from "../types";
+import logo from "../assets/clavium-logo.png";
 import RecordForm from "./RecordForm";
 
 interface Props {
@@ -105,7 +106,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
       <aside className="vault-sidebar">
         <div className="vault-sidebar-top">
           <div className="vault-brand">
-            <span className="vault-brand-dot" />
+            <img src={logo} alt="" width="18" height="18" />
             Clavium
           </div>
           <button className="clv-btn clv-btn-ghost" onClick={onLock} title={`Auto-locks after ${autoLockMinutes} min idle`}>
