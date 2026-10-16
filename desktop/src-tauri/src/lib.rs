@@ -14,6 +14,7 @@ pub fn run() {
             commands::vault_unlock,
             commands::vault_lock,
             commands::vault_is_unlocked,
+            commands::vault_export_sealed,
             commands::vault_list_records,
             commands::vault_add_record,
             commands::vault_update_record,

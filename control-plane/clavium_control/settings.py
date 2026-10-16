@@ -18,6 +18,16 @@ load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = [h for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h] or ["localhost", "127.0.0.1"]
+CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",") if o]
+
+# Caddy terminates TLS and proxies plain HTTP to gunicorn — without this,
+# Django would think every request arrived over plain HTTP and mark
+# cookies accordingly.
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 2592000 if not DEBUG else 0  # 30 days
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -26,6 +36,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "rest_framework",
     "accounts",
     "orgs",
@@ -34,6 +45,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -41,6 +53,14 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# This API authenticates with a per-device bearer token, never a cookie —
+# CORS's usual job (stopping another site's browser-side script from
+# riding a signed-in session) doesn't apply the same way here, since a
+# malicious page can't produce a valid device token just by getting a
+# request to fire. Opened wide so the desktop app's webview (whose origin
+# is tauri://localhost or similar, not this API's own) can call it.
+CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = "clavium_control.urls"
 
@@ -107,3 +127,4 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"

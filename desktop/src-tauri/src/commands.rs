@@ -122,6 +122,21 @@ pub fn vault_is_unlocked(state: State<AppState>) -> CmdResult<bool> {
     Ok(locked_session(&state)?.is_some())
 }
 
+/// The current vault's sealed bytes, base64-encoded — what "back up to
+/// your account" uploads. Read straight from disk rather than re-sealing
+/// in memory: every mutation already reseals immediately (see `reseal`),
+/// so the file on disk is always the authoritative, current version.
+#[tauri::command]
+pub fn vault_export_sealed(state: State<AppState>) -> CmdResult<String> {
+    use base64::engine::general_purpose::STANDARD as BASE64;
+    use base64::Engine;
+
+    let guard = locked_session(&state)?;
+    let session = guard.as_ref().ok_or("no vault is unlocked")?;
+    let bytes = fs::read(&session.path).map_err(|e| format!("could not read vault file: {e}"))?;
+    Ok(BASE64.encode(bytes))
+}
+
 #[tauri::command]
 pub fn vault_list_records(state: State<AppState>) -> CmdResult<Vec<Record>> {
     let guard = locked_session(&state)?;

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { errorMessage, totpCode, vaultAddRecord, vaultDeleteRecord, vaultUpdateRecord } from "../api";
 import type { RecordInput, VaultRecord } from "../types";
 import logo from "../assets/clavium-logo.png";
+import AccountPanel from "./AccountPanel";
 import RecordForm from "./RecordForm";
 
 interface Props {
@@ -21,6 +22,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [revealPassword, setRevealPassword] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -109,10 +111,17 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
             <img src={logo} alt="" width="18" height="18" />
             Clavium
           </div>
-          <button className="clv-btn clv-btn-ghost" onClick={onLock} title={`Auto-locks after ${autoLockMinutes} min idle`}>
-            Lock
-          </button>
+          <div className="vault-sidebar-top-actions">
+            <button className="clv-btn clv-btn-ghost" onClick={() => setShowAccount(true)}>
+              Account
+            </button>
+            <button className="clv-btn clv-btn-ghost" onClick={onLock} title={`Auto-locks after ${autoLockMinutes} min idle`}>
+              Lock
+            </button>
+          </div>
         </div>
+
+        {showAccount && <AccountPanel onClose={() => setShowAccount(false)} />}
 
         <input
           className="clv-input"

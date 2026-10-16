@@ -53,6 +53,11 @@ export function totpCode(secret: string): Promise<TotpCode> {
   return invoke("totp_code", { secret });
 }
 
+/** Base64 of the vault's current sealed bytes, read straight off disk. */
+export function vaultExportSealed(): Promise<string> {
+  return invoke("vault_export_sealed");
+}
+
 /** The friendly half of whatever string a failed command rejected with. */
 export function errorMessage(err: unknown): string {
   return typeof err === "string" ? err : String(err);
