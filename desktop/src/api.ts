@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 
-import type { GenerateInput, RecordInput, VaultRecord, VaultSummary } from "./types";
+import type { GenerateInput, RecordInput, TotpCode, VaultRecord, VaultSummary } from "./types";
 
 /** Where a vault lives if the person never chooses a different location. */
 export async function defaultVaultPath(): Promise<string> {
@@ -47,6 +47,10 @@ export function vaultDeleteRecord(id: string): Promise<void> {
 
 export function generatePassword(input: GenerateInput): Promise<string> {
   return invoke("generate_password", { input });
+}
+
+export function totpCode(secret: string): Promise<TotpCode> {
+  return invoke("totp_code", { secret });
 }
 
 /** The friendly half of whatever string a failed command rejected with. */

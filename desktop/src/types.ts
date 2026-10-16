@@ -8,6 +8,7 @@ export interface VaultRecord {
   password: string;
   url: string;
   notes: string;
+  totp_secret: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -18,6 +19,13 @@ export interface RecordInput {
   password: string;
   url: string;
   notes: string;
+  totpSecret: string | null;
+}
+
+export interface TotpCode {
+  code: string;
+  secondsRemaining: number;
+  periodSeconds: number;
 }
 
 export interface VaultSummary {

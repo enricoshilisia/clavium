@@ -208,6 +208,30 @@
   margin-top: 8px;
 }
 
+/* --- TOTP code --- */
+
+.totp-code {
+  flex: 1;
+  font-family: var(--clv-mono);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--clv-gold-300);
+}
+
+.totp-ring {
+  --totp-fraction: 1;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: conic-gradient(
+    var(--clv-gold-400) calc(var(--totp-fraction) * 360deg),
+    var(--clv-navy-600) 0
+  );
+  transition: background 0.3s linear;
+}
+
 /* --- Record form --- */
 
 .record-form {

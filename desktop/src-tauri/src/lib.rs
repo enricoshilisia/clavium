@@ -19,6 +19,7 @@ pub fn run() {
             commands::vault_update_record,
             commands::vault_delete_record,
             commands::generate_password,
+            commands::totp_code,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

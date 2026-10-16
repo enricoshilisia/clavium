@@ -18,12 +18,13 @@ export default function RecordForm({ initial, onSave, onDelete, onCancel, busy, 
   const [password, setPassword] = useState(initial?.password ?? "");
   const [url, setUrl] = useState(initial?.url ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [totpSecret, setTotpSecret] = useState(initial?.totp_secret ?? "");
   const [showPassword, setShowPassword] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    await onSave({ title, username, password, url, notes });
+    await onSave({ title, username, password, url, notes, totpSecret: totpSecret || null });
   }
 
   return (
@@ -90,6 +91,19 @@ export default function RecordForm({ initial, onSave, onDelete, onCancel, busy, 
           value={url}
           onChange={(e) => setUrl(e.currentTarget.value)}
           placeholder="https://"
+        />
+      </div>
+
+      <div>
+        <label className="clv-label" htmlFor="rf-totp">
+          Authenticator secret (optional)
+        </label>
+        <input
+          id="rf-totp"
+          className="clv-input"
+          value={totpSecret}
+          onChange={(e) => setTotpSecret(e.currentTarget.value)}
+          placeholder="Paste the setup key or otpauth:// URI from the service's 2FA screen"
         />
       </div>
 

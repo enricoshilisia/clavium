@@ -11,6 +11,9 @@ on:
       - "Cargo.lock"
       - ".github/workflows/build-desktop.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -58,3 +61,23 @@ jobs:
             desktop/src-tauri/target/release/bundle/msi/*.msi
             desktop/src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
+
+      # A moving "desktop-latest" release, re-published on every successful
+      # build — unlike a workflow artifact, a release asset is a plain
+      # public URL (no GitHub login, no 90-day expiry), which is what
+      # "here's a link to download it" actually needs.
+      - name: Publish (or update) the desktop-latest release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: Clavium desktop — latest build
+          body: |
+            Automatically built from master (commit ${{ github.sha }}).
+            Unsigned development build — Windows SmartScreen will warn on
+            first run; choose "More info" → "Run anyway".
+          prerelease: true
+          files: |
+            target/release/bundle/msi/*.msi
+            target/release/bundle/nsis/*.exe
+            desktop/src-tauri/target/release/bundle/msi/*.msi
+            desktop/src-tauri/target/release/bundle/nsis/*.exe

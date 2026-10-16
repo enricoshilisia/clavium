@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { errorMessage, vaultAddRecord, vaultDeleteRecord, vaultUpdateRecord } from "../api";
+import { errorMessage, totpCode, vaultAddRecord, vaultDeleteRecord, vaultUpdateRecord } from "../api";
 import type { RecordInput, VaultRecord } from "../types";
 import logo from "../assets/clavium-logo.png";
 import RecordForm from "./RecordForm";
@@ -194,6 +194,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
               mono
             />
             <DetailField label="Website" value={selected.url} onCopy={() => copy(selected.url)} link />
+            {selected.totp_secret && <TotpField secret={selected.totp_secret} onCopy={copy} />}
             {selected.notes && (
               <div className="detail-field">
                 <div className="clv-label">Notes</div>
@@ -213,6 +214,61 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function TotpField({ secret, onCopy }: { secret: string; onCopy: (text: string) => void }) {
+  const [code, setCode] = useState("");
+  const [secondsRemaining, setSecondsRemaining] = useState(0);
+  const [periodSeconds, setPeriodSeconds] = useState(30);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refresh() {
+      try {
+        const result = await totpCode(secret);
+        if (cancelled) return;
+        setCode(result.code);
+        setSecondsRemaining(result.secondsRemaining);
+        setPeriodSeconds(result.periodSeconds);
+        setError(null);
+      } catch (err) {
+        if (!cancelled) setError(errorMessage(err));
+      }
+    }
+
+    refresh();
+    const interval = setInterval(refresh, 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [secret]);
+
+  if (error) {
+    return (
+      <div className="detail-field">
+        <div className="clv-label">Authenticator code</div>
+        <div className="clv-notice clv-notice-danger">{error}</div>
+      </div>
+    );
+  }
+
+  const fraction = periodSeconds > 0 ? secondsRemaining / periodSeconds : 0;
+
+  return (
+    <div className="detail-field">
+      <div className="clv-label">Authenticator code</div>
+      <div className="detail-field-row">
+        <span className="totp-code">{code.replace(/(.{3})(?=.)/, "$1 ")}</span>
+        <div className="totp-ring" style={{ "--totp-fraction": fraction } as React.CSSProperties} />
+        <button className="clv-btn clv-btn-ghost" onClick={() => onCopy(code)} disabled={!code}>
+          Copy
+        </button>
+      </div>
     </div>
   );
 }

@@ -8,7 +8,9 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::MutexGuard;
 
-use clavium_security_core::{generate, GeneratorOptions, Record, Vault};
+use clavium_security_core::{
+    generate, parse_secret_or_uri, seconds_remaining, totp_now, GeneratorOptions, Record, Vault,
+};
 use serde::Serialize;
 use tauri::State;
 use uuid::Uuid;
@@ -135,10 +137,28 @@ pub struct RecordInput {
     pub password: String,
     pub url: String,
     pub notes: String,
+    /// A pasted otpauth:// URI or bare Base32 secret, or empty for no
+    /// authenticator code on this record. Validated eagerly — a typo
+    /// caught now, while the person can still see what they pasted, beats
+    /// discovering it later as a silent "no code shown" with no error.
+    pub totp_secret: Option<String>,
+}
+
+fn validated_totp_secret(input: Option<String>) -> CmdResult<Option<String>> {
+    match input {
+        None => Ok(None),
+        Some(s) if s.trim().is_empty() => Ok(None),
+        Some(s) => {
+            parse_secret_or_uri(&s)
+                .map_err(|e| format!("that doesn't look like a valid authenticator secret: {e}"))?;
+            Ok(Some(s))
+        }
+    }
 }
 
 #[tauri::command]
 pub fn vault_add_record(state: State<AppState>, input: RecordInput) -> CmdResult<Record> {
+    let totp_secret = validated_totp_secret(input.totp_secret)?;
     let mut guard = locked_session(&state)?;
     let session = guard.as_mut().ok_or("no vault is unlocked")?;
 
@@ -147,6 +167,7 @@ pub fn vault_add_record(state: State<AppState>, input: RecordInput) -> CmdResult
     record.password = input.password;
     record.url = input.url;
     record.notes = input.notes;
+    record.totp_secret = totp_secret;
     session.vault.add_record(record.clone());
 
     reseal(session)?;
@@ -160,6 +181,7 @@ pub fn vault_update_record(
     input: RecordInput,
 ) -> CmdResult<Record> {
     let id = Uuid::parse_str(&id).map_err(|_| "that is not a valid record id".to_string())?;
+    let totp_secret = validated_totp_secret(input.totp_secret)?;
     let mut guard = locked_session(&state)?;
     let session = guard.as_mut().ok_or("no vault is unlocked")?;
 
@@ -168,6 +190,7 @@ pub fn vault_update_record(
     record.password = input.password;
     record.url = input.url;
     record.notes = input.notes;
+    record.totp_secret = totp_secret;
     session
         .vault
         .update_record(id, record)
@@ -209,4 +232,30 @@ pub fn generate_password(input: GenerateInput) -> CmdResult<String> {
         include_symbols: input.include_symbols,
     };
     generate(&options).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TotpCode {
+    pub code: String,
+    pub seconds_remaining: u64,
+    pub period_seconds: u64,
+}
+
+/// Stateless on purpose, like `generate_password` — the frontend already
+/// has the record's `totp_secret` in memory from the unlocked vault, so
+/// this just needs the secret itself, not a lookup by record id.
+#[tauri::command]
+pub fn totp_code(secret: String) -> CmdResult<TotpCode> {
+    let params = parse_secret_or_uri(&secret).map_err(|e| e.to_string())?;
+    let code = totp_now(&params).map_err(|e| e.to_string())?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs();
+    Ok(TotpCode {
+        code,
+        seconds_remaining: seconds_remaining(&params, now),
+        period_seconds: params.period_seconds,
+    })
 }
