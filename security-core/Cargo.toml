@@ -28,6 +28,10 @@ thiserror = "1.0.64"
 # as aes-gcm and argon2 above, not a second crypto library to trust.
 rsa = "0.9.8"
 sha2 = "0.10.8"
+# HOTP/TOTP (RFC 4226 / RFC 6238) for the Authenticator — HMAC over a
+# selectable hash, all RustCrypto, same project as everything above.
+hmac = "0.12.1"
+sha1 = "0.10.6"
 
 [dev-dependencies]
 tempfile = "3.13.0"

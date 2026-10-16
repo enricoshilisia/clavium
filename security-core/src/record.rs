@@ -14,6 +14,11 @@ pub struct Record {
     pub password: String,
     pub url: String,
     pub notes: String,
+    /// A pasted `otpauth://totp/...` URI or bare Base32 secret — see
+    /// `crate::otp::parse_secret_or_uri`. `#[serde(default)]` so a vault
+    /// sealed before this field existed still deserializes.
+    #[serde(default)]
+    pub totp_secret: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -29,8 +34,32 @@ impl Record {
             password: String::new(),
             url: String::new(),
             notes: String::new(),
+            totp_secret: None,
             created_at: now,
             updated_at: now,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_record_serialized_before_totp_secret_existed_still_deserializes() {
+        // Exactly the shape a vault sealed before this field was added
+        // would decrypt to — must default to `None`, not fail to parse.
+        let old_shape = r#"{
+            "id": "11111111-1111-1111-1111-111111111111",
+            "title": "Old record",
+            "username": "u",
+            "password": "p",
+            "url": "",
+            "notes": "",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z"
+        }"#;
+        let record: Record = serde_json::from_str(old_shape).unwrap();
+        assert_eq!(record.totp_secret, None);
     }
 }

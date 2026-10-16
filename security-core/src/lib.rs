@@ -8,6 +8,7 @@ pub mod error;
 pub mod generator;
 pub mod kdf;
 pub mod keypair;
+pub mod otp;
 pub mod record;
 pub mod vault;
 
@@ -15,5 +16,9 @@ pub use error::{Result, VaultError};
 pub use generator::{generate, generate_passphrase, GeneratorOptions};
 pub use kdf::KdfParams;
 pub use keypair::{generate_shared_key, wrap_key_for_device, DeviceKeypair, SHARED_KEY_LEN};
+pub use otp::{
+    hotp, parse_otpauth_uri, parse_secret_or_uri, seconds_remaining, totp_at, totp_now,
+    OtpAlgorithm, TotpParams,
+};
 pub use record::Record;
 pub use vault::Vault;

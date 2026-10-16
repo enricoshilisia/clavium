@@ -11,8 +11,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use clap::{Parser, Subcommand};
 use clavium_security_core::{
-    generate, generate_shared_key, wrap_key_for_device, DeviceKeypair, GeneratorOptions, Record,
-    Vault,
+    generate, generate_shared_key, parse_otpauth_uri, seconds_remaining, totp_now,
+    wrap_key_for_device, DeviceKeypair, GeneratorOptions, Record, Vault,
 };
 
 #[derive(Parser)]
@@ -76,6 +76,20 @@ enum Command {
         private_key_b64: PathBuf,
         wrapped_key_b64: PathBuf,
         sealed_blob_b64: PathBuf,
+    },
+    /// Milestone 4's proof: generate a live TOTP code from a real
+    /// `otpauth://totp/...` URI (what scanning a real account's 2FA QR
+    /// code produces) and print it with its remaining validity, so it
+    /// can be typed into that account's own "enter your code" prompt to
+    /// prove this engine is accepted by a real service, not just by its
+    /// own tests.
+    Totp {
+        otpauth_uri: String,
+        /// Keep printing a fresh code every second instead of printing
+        /// once and exiting — useful if the code expires before you
+        /// finish typing it.
+        #[arg(long)]
+        watch: bool,
     },
 }
 
@@ -173,6 +187,40 @@ fn main() {
             wrapped_key_b64,
             sealed_blob_b64,
         } => open_shared(&private_key_b64, &wrapped_key_b64, &sealed_blob_b64),
+        Command::Totp { otpauth_uri, watch } => run_totp(&otpauth_uri, watch),
+    }
+}
+
+fn run_totp(otpauth_uri: &str, watch: bool) {
+    let (label, params) = match parse_otpauth_uri(otpauth_uri) {
+        Ok(parsed) => parsed,
+        Err(e) => {
+            eprintln!("Could not parse that otpauth URI: {e}");
+            std::process::exit(1);
+        }
+    };
+    println!("Account: {label}");
+    println!(
+        "Algorithm: {:?}  Digits: {}  Period: {}s\n",
+        params.algorithm, params.digits, params.period_seconds
+    );
+
+    loop {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let code = totp_now(&params).expect("could not generate a code");
+        let remaining = seconds_remaining(&params, now);
+        print!("\rCode: {code}   (valid for {remaining:>2}s)   ");
+        use std::io::Write;
+        std::io::stdout().flush().ok();
+
+        if !watch {
+            println!();
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 }
 
