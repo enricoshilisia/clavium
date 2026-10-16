@@ -38,9 +38,16 @@ jobs:
         working-directory: desktop
         run: npm run tauri -- build
 
+      - name: Show where the bundle actually landed
+        if: always()
+        run: Get-ChildItem -Recurse -Include *.msi,*.exe -Path . -ErrorAction SilentlyContinue | Select-Object FullName
+
       # Cargo workspace builds land in the workspace root's target/, not
-      # desktop/src-tauri/target/ — both patterns are listed so this keeps
-      # working if that ever changes, without failing when one is empty.
+      # desktop/src-tauri/target/. A previous run found neither path
+      # because a committed .cargo/config.toml hard-coded a dev-only
+      # Linux target-dir that silently redirected every build, CI
+      # included — that file is now gitignored instead of committed.
+      # Both candidate paths stay here anyway, as a no-cost safety net.
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
@@ -50,4 +57,4 @@ jobs:
             target/release/bundle/nsis/*.exe
             desktop/src-tauri/target/release/bundle/msi/*.msi
             desktop/src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: warn
+          if-no-files-found: error

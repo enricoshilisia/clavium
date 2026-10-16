@@ -1,3 +1,7 @@
 /target
 *.vault
 .DS_Store
+# Local-machine-only cargo override (e.g. a relocated target-dir on a
+# disk-constrained dev box) — never shared, since a hard-coded local path
+# here silently breaks builds on every other machine, CI included.
+/.cargo/config.toml
