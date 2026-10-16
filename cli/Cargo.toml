@@ -1,0 +1,11 @@
+[package]
+name = "clavium-cli"
+version = "0.1.0"
+edition = "2021"
+description = "Milestone 0's proof harness: exercises clavium-security-core from a real command line, against real files on disk — no UI, no mocking."
+
+[dependencies]
+clavium-security-core = { path = "../security-core" }
+rpassword = "7.3.1"
+clap = { version = "4.5.20", features = ["derive"] }
+base64 = "0.22.1"

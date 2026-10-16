@@ -1,0 +1,3 @@
+[workspace]
+resolver = "2"
+members = ["security-core", "cli", "desktop/src-tauri"]

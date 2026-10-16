@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: clavium-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: clavium
+      POSTGRES_USER: clavium
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5544:5432"
+    volumes:
+      - clavium-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clavium -d clavium"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  clavium-db-data:

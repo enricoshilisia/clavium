@@ -1,0 +1,33 @@
+[package]
+name = "clavium-security-core"
+version = "0.1.0"
+edition = "2021"
+description = "Clavium's vault cryptography: key derivation, authenticated encryption, record storage. No UI, no network — this crate's only job is that a vault cannot be read without its master password, and can always be read with it."
+license = "PROPRIETARY"
+
+[dependencies]
+# Argon2id key derivation. The `argon2` crate implements RFC 9106 directly
+# rather than wrapping a C library — one less thing to audit the build
+# toolchain for.
+argon2 = "0.5.3"
+# AES-256-GCM authenticated encryption. Never a hand-rolled cipher mode —
+# this is the RustCrypto project's own audited implementation.
+aes-gcm = "0.10.3"
+rand = "0.8.5"
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0.128"
+uuid = { version = "1.10.0", features = ["v4", "serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
+# Best-effort zeroing of secret material on drop — the master password and
+# every derived key are wrapped in this rather than a plain String/Vec<u8>,
+# so a vault's own memory does not outlive its usefulness.
+zeroize = { version = "1.8.1", features = ["derive"] }
+thiserror = "1.0.64"
+# RSA-OAEP key wrapping for shared (organization) vaults — the asymmetric
+# half of the key hierarchy. RustCrypto's own implementation, same project
+# as aes-gcm and argon2 above, not a second crypto library to trust.
+rsa = "0.9.8"
+sha2 = "0.10.8"
+
+[dev-dependencies]
+tempfile = "3.13.0"
