@@ -25,6 +25,19 @@ serde_json = "1"
 clavium-security-core = { path = "../../security-core" }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 base64 = "0.22.1"
+# The local bridge a browser extension talks to for autofill — a plain
+# blocking HTTP server on its own OS thread is enough for occasional,
+# single-tab traffic, and it keeps this out of Tauri's own async runtime
+# entirely rather than entangling the two.
+tiny_http = "0.12"
+rand = "0.8"
+sha2 = "0.10"
+hex = "0.4"
+# Correct hostname extraction for matching a saved record's URL against the
+# browser tab asking for autofill — hand-rolled parsing of untrusted URLs is
+# a classic source of "wrong site gets the password" bugs, which here is a
+# real security property, not a cosmetic one.
+url = "2.5"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

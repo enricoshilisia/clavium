@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 
-import type { GenerateInput, RecordInput, TotpCode, VaultRecord, VaultSummary } from "./types";
+import type { GenerateInput, PairedExtension, RecordInput, TotpCode, VaultRecord, VaultSummary } from "./types";
 
 /** Where a vault lives if the person never chooses a different location. */
 export async function defaultVaultPath(): Promise<string> {
@@ -56,6 +56,20 @@ export function totpCode(secret: string): Promise<TotpCode> {
 /** Base64 of the vault's current sealed bytes, read straight off disk. */
 export function vaultExportSealed(): Promise<string> {
   return invoke("vault_export_sealed");
+}
+
+/** A fresh 6-character pairing code, valid for 2 minutes, for a browser
+ * extension to redeem. */
+export function bridgeGeneratePairingCode(): Promise<string> {
+  return invoke("bridge_generate_pairing_code");
+}
+
+export function bridgeListPaired(): Promise<PairedExtension[]> {
+  return invoke("bridge_list_paired");
+}
+
+export function bridgeRevokePaired(id: string): Promise<void> {
+  return invoke("bridge_revoke_paired", { id });
 }
 
 /** The friendly half of whatever string a failed command rejected with. */

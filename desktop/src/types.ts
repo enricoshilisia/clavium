@@ -39,3 +39,9 @@ export interface GenerateInput {
   includeDigits: boolean;
   includeSymbols: boolean;
 }
+
+export interface PairedExtension {
+  id: string;
+  label: string;
+  paired_at: number;
+}
