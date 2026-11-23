@@ -24,7 +24,7 @@ pub const KEY_LEN: usize = 32; // AES-256
 /// defaults aimed at a genuinely slow, deliberate unlock on ordinary
 /// hardware — tuned against real target machines before Milestone 1
 /// ships, not assumed correct from a table.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct KdfParams {
     /// Memory cost, in KiB.
     pub m_cost: u32,
@@ -44,6 +44,18 @@ impl Default for KdfParams {
         Self {
             m_cost: 65536,
             t_cost: 3,
+            p_cost: 1,
+        }
+    }
+}
+
+impl KdfParams {
+    /// Deliberately weak parameters so unit tests do not spend seconds in
+    /// Argon2. Never used outside tests and the platform test harnesses.
+    pub fn fast_for_tests() -> Self {
+        Self {
+            m_cost: 1024,
+            t_cost: 1,
             p_cost: 1,
         }
     }

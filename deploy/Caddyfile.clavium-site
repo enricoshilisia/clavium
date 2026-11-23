@@ -1,0 +1,18 @@
+# Clavium web app (PWA) and download page.
+clavium.172-169-233-189.sslip.io {
+	root * /srv/clavium/site
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+	# The service worker and app entry must never be cached stale.
+	@fresh path /sw.js /index.html / /flutter_bootstrap.js /version.json
+	header @fresh Cache-Control "no-cache"
+	@apk path *.apk
+	header @apk Content-Type application/vnd.android.package-archive
+	redir /download /download/ 308
+	file_server
+}

@@ -1,7 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { appDataDir, join } from "@tauri-apps/api/path";
 
-import type { GenerateInput, PairedExtension, RecordInput, TotpCode, VaultRecord, VaultSummary } from "./types";
+import type {
+  CategoryInfo,
+  EncryptedItem,
+  GenerateInput,
+  HealthReport,
+  KindInfo,
+  MergeReport,
+  PairedExtension,
+  RecordInput,
+  SyncState,
+  TotpCode,
+  VaultRecord,
+  VaultSummary,
+} from "./types";
 
 /** Where a vault lives if the person never chooses a different location. */
 export async function defaultVaultPath(): Promise<string> {
@@ -70,6 +83,55 @@ export function bridgeListPaired(): Promise<PairedExtension[]> {
 
 export function bridgeRevokePaired(id: string): Promise<void> {
   return invoke("bridge_revoke_paired", { id });
+}
+
+export function categoriesList(): Promise<CategoryInfo[]> {
+  return invoke("categories_list");
+}
+
+export function recordKinds(): Promise<KindInfo[]> {
+  return invoke("record_kinds");
+}
+
+export function vaultCategoryCounts(): Promise<Record<string, number>> {
+  return invoke("vault_category_counts");
+}
+
+/** A person picks a category; `learn` applies it to the rest of that site. */
+export function vaultSetCategory(id: string, category: string | null, learn: boolean): Promise<VaultRecord[]> {
+  return invoke("vault_set_category", { id, category, learn });
+}
+
+export function vaultHealth(): Promise<HealthReport> {
+  return invoke("vault_health");
+}
+
+export function vaultChangeMasterPassword(newPassword: string): Promise<void> {
+  return invoke("vault_change_master_password", { newPassword });
+}
+
+export function vaultCreateRecoveryKey(): Promise<string> {
+  return invoke("vault_create_recovery_key");
+}
+
+export function vaultRestoreFromKeyring(path: string, header: string, masterPassword: string): Promise<void> {
+  return invoke("vault_restore_from_keyring", { path, header, masterPassword });
+}
+
+export function syncKeyringHeader(): Promise<string> {
+  return invoke("sync_keyring_header");
+}
+
+export function syncState(): Promise<SyncState> {
+  return invoke("sync_state");
+}
+
+export function syncApplyPull(items: EncryptedItem[], cursor: number): Promise<MergeReport> {
+  return invoke("sync_apply_pull", { items, cursor });
+}
+
+export function syncMarkPushed(accepted: { item: EncryptedItem; revision: number }[]): Promise<void> {
+  return invoke("sync_mark_pushed", { accepted });
 }
 
 /** The friendly half of whatever string a failed command rejected with. */

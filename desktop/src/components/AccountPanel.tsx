@@ -1,66 +1,54 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import {
-  backupVault,
-  listBackups,
-  loadSession,
-  login,
-  logout,
-  registerAccount,
-  type AccountSession,
-  type SnapshotMeta,
-} from "../account";
-import { vaultExportSealed } from "../api";
+import { loadSession, login, logout, registerAccount, type AccountSession } from "../account";
+import { forgetKeyringRevision } from "../sync";
 
 interface Props {
   onClose: () => void;
+  onSessionChange: (session: AccountSession | null) => void;
+  syncError: string | null;
 }
 
-type Mode = "login" | "register";
-
-export default function AccountPanel({ onClose }: Props) {
+export default function AccountPanel({ onClose, onSessionChange, syncError }: Props) {
   const [session, setSession] = useState<AccountSession | null>(() => loadSession());
+  const change = (s: AccountSession | null) => {
+    setSession(s);
+    onSessionChange(s);
+  };
 
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="clv-card account-card" onMouseDown={(e) => e.stopPropagation()}>
         <div className="generator-header">
-          <h2>Account</h2>
+          <h2>Account and sync</h2>
           <button className="clv-btn clv-btn-ghost" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
-
         {session ? (
-          <LoggedIn session={session} onLoggedOut={() => setSession(null)} />
+          <LoggedIn session={session} syncError={syncError} onLoggedOut={() => change(null)} />
         ) : (
-          <LoggedOut onLoggedIn={setSession} />
+          <LoggedOut onLoggedIn={change} />
         )}
       </div>
     </div>
   );
 }
 
-function LoggedOut({ onLoggedIn }: { onLoggedIn: (session: AccountSession) => void }) {
-  const [mode, setMode] = useState<Mode>("login");
+export function LoggedOut({ onLoggedIn, submitLabel }: { onLoggedIn: (session: AccountSession) => void; submitLabel?: string }) {
+  const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    setNotice(null);
     try {
-      if (mode === "register") {
-        await registerAccount(email, password);
-        setNotice("Account created. Signing you in…");
-      }
-      const session = await login(email, password);
-      onLoggedIn(session);
+      if (mode === "register") await registerAccount(email, password);
+      onLoggedIn(await login(email, password));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -71,25 +59,15 @@ function LoggedOut({ onLoggedIn }: { onLoggedIn: (session: AccountSession) => vo
   return (
     <form onSubmit={submit} className="unlock-form">
       <p className="account-intro">
-        An account enables encrypted backup of this vault — a separate secret from
-        your master password, which the account server never sees.
+        Sign in to keep this vault in step across your computers and phone. Everything is encrypted on this device first;
+        your account password only signs you in and is not your master password.
       </p>
-
       <div>
         <label className="clv-label" htmlFor="acc-email">
           Email
         </label>
-        <input
-          id="acc-email"
-          className="clv-input"
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.currentTarget.value)}
-          required
-          autoFocus
-        />
+        <input id="acc-email" className="clv-input" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} required autoFocus />
       </div>
-
       <div>
         <label className="clv-label" htmlFor="acc-password">
           Account password
@@ -104,106 +82,41 @@ function LoggedOut({ onLoggedIn }: { onLoggedIn: (session: AccountSession) => vo
           minLength={10}
         />
       </div>
-
-      {notice && <div className="clv-notice clv-notice-success">{notice}</div>}
       {error && <div className="clv-notice clv-notice-danger">{error}</div>}
-
       <button type="submit" className="clv-btn clv-btn-primary" disabled={busy}>
-        {busy ? "Working…" : mode === "login" ? "Sign in" : "Create account"}
+        {busy ? "Working…" : submitLabel ?? (mode === "login" ? "Sign in and sync" : "Create account and sync")}
       </button>
-
-      <button
-        type="button"
-        className="clv-btn clv-btn-ghost"
-        onClick={() => {
-          setMode(mode === "login" ? "register" : "login");
-          setError(null);
-          setNotice(null);
-        }}
-      >
+      <button type="button" className="clv-btn clv-btn-ghost" onClick={() => setMode(mode === "login" ? "register" : "login")}>
         {mode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
       </button>
     </form>
   );
 }
 
-function LoggedIn({ session, onLoggedOut }: { session: AccountSession; onLoggedOut: () => void }) {
-  const [backups, setBackups] = useState<SnapshotMeta[] | null>(null);
+function LoggedIn({ session, syncError, onLoggedOut }: { session: AccountSession; syncError: string | null; onLoggedOut: () => void }) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  async function refresh() {
-    try {
-      setBackups(await listBackups(session));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    }
-  }
-
-  useEffect(() => {
-    refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function doBackup() {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const sealed = await vaultExportSealed();
-      const snapshot = await backupVault(session, sealed);
-      setNotice(`Backed up as version ${snapshot.version}.`);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function doLogout() {
     setBusy(true);
     try {
       await logout(session);
+      forgetKeyringRevision();
       onLoggedOut();
     } finally {
       setBusy(false);
     }
   }
-
   return (
     <div>
       <p className="account-intro">
-        Signed in as <strong>{session.email}</strong>
+        Signed in as <strong>{session.email}</strong>. Changes sync automatically and appear on your other devices within seconds.
       </p>
-
-      {error && <div className="clv-notice clv-notice-danger">{error}</div>}
-      {notice && <div className="clv-notice clv-notice-success">{notice}</div>}
-
+      {syncError && <div className="clv-notice clv-notice-danger">{syncError}</div>}
       <div className="account-actions">
-        <button className="clv-btn clv-btn-primary" onClick={doBackup} disabled={busy}>
-          {busy ? "Working…" : "Back up vault now"}
-        </button>
         <button className="clv-btn" onClick={doLogout} disabled={busy}>
-          Sign out
+          Sign out on this computer
         </button>
       </div>
-
-      <div className="clv-label account-backups-label">Backup history</div>
-      <div className="account-backups">
-        {backups === null && <div className="vault-empty">Loading…</div>}
-        {backups?.length === 0 && <div className="vault-empty">No backups yet.</div>}
-        {backups?.map((b) => (
-          <div key={b.id} className="account-backup-row">
-            <span>v{b.version}</span>
-            <span className="account-backup-meta">
-              {(b.size_bytes / 1024).toFixed(1)} KB · {b.uploaded_by_device ?? "unknown device"}
-            </span>
-            <span className="account-backup-meta">{new Date(b.created_at).toLocaleString()}</span>
-          </div>
-        ))}
-      </div>
+      <p className="faint">Signing out stops syncing. Your vault stays on this computer.</p>
     </div>
   );
 }

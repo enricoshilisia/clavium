@@ -1,0 +1,19 @@
+[package]
+name = "clavium-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "clavium-api compiled to WebAssembly for the PWA. The browser gets the same audited Rust crypto as the native apps, not a JavaScript reimplementation."
+license = "PROPRIETARY"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+clavium-api = { path = "../api" }
+wasm-bindgen = "0.2"
+
+# Browser randomness and clock for the crates underneath.
+getrandom02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
+uuid = { version = "1.10.0", features = ["js"] }
+chrono = { version = "0.4.38", features = ["wasmbind"] }

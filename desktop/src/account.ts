@@ -1,10 +1,9 @@
-// The Clavium account layer — entirely separate from the vault's own
-// master password (see PLAN.md's security model). This never touches
-// vault contents in cleartext: `backupVault` uploads exactly the sealed
-// bytes `vault_export_sealed` reads off disk, and the control plane only
-// ever stores and returns that same opaque blob.
+// The Clavium account layer, separate from the vault's master password.
+// Everything sent to the control plane is either account credentials or
+// ciphertext produced by the Rust core.
 
 import { CONTROL_PLANE_URL } from "./config";
+export type { AccountSession as Session };
 
 const STORAGE_KEYS = {
   token: "clavium.account.token",
@@ -98,7 +97,7 @@ export async function login(email: string, password: string): Promise<AccountSes
       email,
       password,
       client_device_id: clientDeviceId,
-      name: "Clavium Desktop",
+      name: `Clavium Desktop (${navigator.platform || "computer"})`,
       platform: navigator.platform || "desktop",
     }),
   });
@@ -136,3 +135,67 @@ export async function backupVault(session: AccountSession, sealedBase64: string)
 export async function listBackups(session: AccountSession): Promise<SnapshotMeta[]> {
   return apiFetch("/api/vaults/snapshots/", { headers: authHeader(session) });
 }
+
+// ---- per-record sync ----
+
+export interface KeyringResponse {
+  vault_id: string;
+  header: unknown;
+  revision: number;
+  counter: number;
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public body?: unknown) {
+    super(message);
+  }
+}
+
+async function apiCall(session: AccountSession, method: string, path: string, body?: unknown) {
+  let response: Response;
+  try {
+    response = await fetch(`${CONTROL_PLANE_URL}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json", ...authHeader(session) },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError(0, "Could not reach the server. Check your connection.");
+  }
+  let data: any = null;
+  try {
+    data = await response.json();
+  } catch {
+    // empty or non-JSON body
+  }
+  if (!response.ok) {
+    let msg = data?.detail ?? `Request failed (HTTP ${response.status})`;
+    if (response.status === 401) msg = "This computer was signed out. Sign in again.";
+    if (response.status === 429) msg = "Too many attempts. Wait a minute and try again.";
+    throw new ApiError(response.status, msg, data);
+  }
+  return data;
+}
+
+export async function getKeyring(session: AccountSession): Promise<KeyringResponse | null> {
+  try {
+    return await apiCall(session, "GET", "/api/sync/keyring/");
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return null;
+    throw e;
+  }
+}
+
+export function putKeyring(session: AccountSession, vaultId: string, header: unknown, baseRevision: number): Promise<KeyringResponse> {
+  return apiCall(session, "PUT", "/api/sync/keyring/", { vault_id: vaultId, header, base_revision: baseRevision });
+}
+
+export function pullItems(session: AccountSession, since: number, wait = false) {
+  return apiCall(session, "GET", `/api/sync/items/?since=${since}${wait ? "&wait=1" : ""}`);
+}
+
+export function pushItems(session: AccountSession, vaultId: string, items: unknown[]) {
+  return apiCall(session, "POST", "/api/sync/items/", { vault_id: vaultId, items });
+}
+
+export { CONTROL_PLANE_URL };

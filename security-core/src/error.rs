@@ -32,6 +32,21 @@ pub enum VaultError {
 
     #[error("no record with that id exists in this vault")]
     RecordNotFound,
+
+    #[error("no key slot with that id exists in this vault")]
+    SlotNotFound,
+
+    #[error("the last master-password slot cannot be removed")]
+    LastPasswordSlot,
+
+    #[error("this vault has no unlocked key; open it with Vault::open first")]
+    NoKeyring,
+
+    #[error("unknown category: {0}")]
+    UnknownCategory(String),
+
+    #[error("encrypted item belongs to a different record or vault")]
+    ItemMismatch,
 }
 
 pub type Result<T> = std::result::Result<T, VaultError>;

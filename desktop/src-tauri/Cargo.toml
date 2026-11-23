@@ -1,6 +1,6 @@
 [package]
 name = "clavium-desktop"
-version = "0.1.0"
+version = "0.2.0"
 description = "Clavium — offline-first password vault"
 authors = ["Clavium"]
 edition = "2024"

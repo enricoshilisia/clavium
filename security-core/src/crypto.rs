@@ -47,6 +47,41 @@ pub fn decrypt(key: &DerivedKey, ciphertext: &[u8], nonce: &[u8; NONCE_LEN]) -> 
         .map_err(|_| VaultError::Decryption)
 }
 
+/// [`encrypt`] with additional authenticated data: `aad` is not encrypted
+/// but is bound to the ciphertext, so the ciphertext only decrypts next to
+/// the exact same `aad`. Used to tie a record's ciphertext to its own id
+/// (no swapping two records' ciphertexts on the server) and a vault's
+/// payload to its own header (no stripping or swapping key slots).
+pub fn encrypt_with_aad(
+    key: &[u8; 32],
+    plaintext: &[u8],
+    aad: &[u8],
+) -> Result<(Vec<u8>, [u8; NONCE_LEN])> {
+    use aes_gcm::aead::Payload;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| VaultError::Encryption(e.to_string()))?;
+    let mut nonce_bytes = [0u8; NONCE_LEN];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(Nonce::from_slice(&nonce_bytes), Payload { msg: plaintext, aad })
+        .map_err(|e| VaultError::Encryption(e.to_string()))?;
+    Ok((ciphertext, nonce_bytes))
+}
+
+pub fn decrypt_with_aad(
+    key: &[u8; 32],
+    ciphertext: &[u8],
+    nonce: &[u8; NONCE_LEN],
+    aad: &[u8],
+) -> Result<Vec<u8>> {
+    use aes_gcm::aead::Payload;
+    let cipher =
+        Aes256Gcm::new_from_slice(key).map_err(|e| VaultError::Encryption(e.to_string()))?;
+    cipher
+        .decrypt(Nonce::from_slice(nonce), Payload { msg: ciphertext, aad })
+        .map_err(|_| VaultError::Decryption)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +134,13 @@ mod tests {
         let (_, nonce_a) = encrypt(&key, b"same message").unwrap();
         let (_, nonce_b) = encrypt(&key, b"same message").unwrap();
         assert_ne!(nonce_a, nonce_b);
+    }
+
+    #[test]
+    fn aad_must_match_to_decrypt() {
+        let key = [7u8; 32];
+        let (ct, nonce) = encrypt_with_aad(&key, b"payload", b"record-a").unwrap();
+        assert_eq!(decrypt_with_aad(&key, &ct, &nonce, b"record-a").unwrap(), b"payload");
+        assert!(decrypt_with_aad(&key, &ct, &nonce, b"record-b").is_err());
     }
 }

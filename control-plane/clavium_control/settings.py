@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "accounts",
     "orgs",
     "vaults",
+    "sync",
 ]
 
 MIDDLEWARE = [
@@ -119,6 +120,27 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    # Unauthenticated endpoints (register, sign-in) are limited per client
+    # IP to slow down password guessing; everything else per account.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.ScopedRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "auth": os.environ.get("CLAVIUM_AUTH_RATE", "10/min"),
+        "user": os.environ.get("CLAVIUM_USER_RATE", "600/min"),
+    },
+    # Caddy is the only proxy in front of gunicorn.
+    "NUM_PROXIES": 1,
+}
+
+# Throttle counters must be shared across gunicorn workers, so a
+# per-process memory cache would multiply every limit by the worker count.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "clavium_cache",
+    }
 }
 
 LANGUAGE_CODE = "en-us"

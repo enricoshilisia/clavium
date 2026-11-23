@@ -15,6 +15,7 @@ class RegisterView(APIView):
     """
 
     permission_classes = [AllowAny]
+    throttle_scope = "auth"
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -43,6 +44,7 @@ class DeviceRegisterView(APIView):
     """
 
     permission_classes = [AllowAny]
+    throttle_scope = "auth"
 
     def post(self, request):
         serializer = DeviceRegisterSerializer(data=request.data)

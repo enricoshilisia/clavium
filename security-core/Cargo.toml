@@ -32,6 +32,13 @@ sha2 = "0.10.8"
 # selectable hash, all RustCrypto, same project as everything above.
 hmac = "0.12.1"
 sha1 = "0.10.6"
+# HKDF-SHA256 for deriving key-slot wrapping keys from high-entropy inputs
+# (a passkey's PRF output, a recovery key), where Argon2 adds nothing.
+hkdf = "0.12.4"
+base64 = "0.22.1"
+# Host extraction for auto-categorisation; the same crate the desktop
+# bridge already trusts for URL matching.
+url = "2.5"
 
 [dev-dependencies]
 tempfile = "3.13.0"

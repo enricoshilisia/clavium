@@ -1,0 +1,13 @@
+[package]
+name = "clavium-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "C ABI over clavium-api for the Flutter app (dart:ffi). Two functions: invoke a JSON command, free the returned string."
+license = "PROPRIETARY"
+
+[lib]
+name = "clavium_ffi"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+clavium-api = { path = "../api" }

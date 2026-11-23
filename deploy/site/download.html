@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Download Clavium</title>
+<meta name="theme-color" content="#060E1C">
+<link rel="icon" href="/favicon.png">
+<style>
+  :root { --bg:#060E1C; --card:#102244; --border:rgba(154,182,224,.16); --text:#E9EDF5; --dim:#9FB0C9; --blue:#3D74C4; --gold:#C9A227; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 48px 16px 64px; }
+  header { display:flex; align-items:center; gap:14px; margin-bottom: 8px; }
+  header img { width:44px; height:44px; border-radius:10px; }
+  h1 { font-size: 28px; margin: 0; }
+  .lead { color: var(--dim); margin: 0 0 32px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+  .card { background: var(--card); border:1px solid var(--border); border-radius: 14px; padding: 20px; display:flex; flex-direction:column; gap:10px; }
+  .card h2 { font-size: 18px; margin: 0; }
+  .card p { color: var(--dim); margin: 0; font-size: 14px; flex: 1; }
+  a.btn { display:inline-block; text-align:center; padding: 10px 14px; border-radius: 10px; background: var(--blue); color:#fff; text-decoration:none; font-weight:600; }
+  a.btn.gold { background: var(--gold); color: var(--bg); }
+  a.sub { color: var(--dim); font-size: 13px; }
+  .note { margin-top: 32px; color: var(--dim); font-size: 13px; border-top:1px solid var(--border); padding-top: 16px; }
+  code { color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <header><img src="/icons/Icon-192.png" alt=""><h1>Clavium</h1></header>
+  <p class="lead">Passwords, cards, bank details and authenticator codes, encrypted on your device and kept in step across all of them.</p>
+  <div class="grid">
+    <section class="card">
+      <h2>Windows</h2>
+      <p>Desktop app with browser autofill. Windows 10 and 11.</p>
+      <a class="btn" href="{{WINDOWS_EXE}}">Download installer (.exe)</a>
+      <a class="sub" href="{{WINDOWS_MSI}}">MSI package for IT deployment</a>
+    </section>
+    <section class="card">
+      <h2>Android</h2>
+      <p>Vault, authenticator codes and QR scanning, unlock with fingerprint. Android 7 or newer.</p>
+      <a class="btn" href="/download/clavium.apk">Download for Android (.apk)</a>
+      <a class="sub" href="#android-help">How to install</a>
+    </section>
+    <section class="card">
+      <h2>Web app</h2>
+      <p>Works in any modern browser and installs to your home screen on iPhone and Android. Opens offline.</p>
+      <a class="btn gold" href="/">Open Clavium</a>
+      <a class="sub" href="#install-help">Add to home screen</a>
+    </section>
+  </div>
+  <div class="note">
+    <p id="android-help"><strong>Installing on Android:</strong> open the downloaded file and allow installs from your browser when asked. The app is signed with the Clavium release key, SHA-256 <code>{{APK_CERT}}</code>.</p>
+    <p id="install-help"><strong>Web app on iPhone:</strong> open it in Safari, tap Share, then Add to Home Screen. On Android Chrome, tap Install app.</p>
+    <p><strong>Windows:</strong> the installer is not code-signed yet, so SmartScreen may warn on first run. Choose More info, then Run anyway.</p>
+    <p>Already use Clavium? Choose "I already use Clavium" on first launch and sign in to bring your vault across.</p>
+    <p>Builds updated {{UPDATED}}.</p>
+  </div>
+</main>
+</body>
+</html>

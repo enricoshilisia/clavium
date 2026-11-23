@@ -155,6 +155,27 @@ const BASE32_ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 /// what a scanned `otpauth://` QR code's `secret` parameter is), so this
 /// is a correctness utility, not a security boundary: no secret ever
 /// needs to round-trip through this crate undecoded.
+/// RFC 4648 base32 without padding (used for recovery keys and for
+/// exporting TOTP secrets).
+pub fn base32_encode(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let mut out = String::with_capacity((data.len() * 8 + 4) / 5);
+    let mut buffer: u32 = 0;
+    let mut bits = 0;
+    for &byte in data {
+        buffer = (buffer << 8) | byte as u32;
+        bits += 8;
+        while bits >= 5 {
+            bits -= 5;
+            out.push(ALPHABET[((buffer >> bits) & 31) as usize] as char);
+        }
+    }
+    if bits > 0 {
+        out.push(ALPHABET[((buffer << (5 - bits)) & 31) as usize] as char);
+    }
+    out
+}
+
 pub fn base32_decode(input: &str) -> Result<Vec<u8>> {
     let cleaned: Vec<u8> = input
         .bytes()
