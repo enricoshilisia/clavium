@@ -106,4 +106,44 @@ void main() {
     expect(jsonEncode(raw).contains('NCBA'), isFalse);
     expect(jsonEncode(raw).contains('from-a'), isFalse);
   }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('QR sign-in: a signed-in phone approves a new device', () async {
+    final tmp = Directory.systemTemp.createTempSync('clavium_qr');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final phone = dev(Directory('${tmp.path}/p')..createSync());
+    final laptop = dev(Directory('${tmp.path}/l')..createSync());
+    final qrEmail = 'qr-${Random().nextInt(1 << 32)}@example.com';
+
+    await phone.init();
+    await phone.createVault(master);
+    await phone.addRecord({'title': 'Co-op Bank', 'url': 'co-opbank.co.ke', 'password': 'coop-pass'});
+    await phone.register(server!, qrEmail, accountPw);
+    await phone.signIn(server, qrEmail, accountPw);
+    expect(phone.syncError, isNull, reason: phone.syncError);
+
+    await laptop.init();
+    final link = await laptop.startLink(server);
+    expect(link.qr, startsWith('clavium://link?'));
+    final waiting = laptop.waitForLink(link);
+
+    // The phone scans the QR (the same string) and approves.
+    final inspected = await phone.inspectLink(link.qr);
+    expect(inspected.code, link.code, reason: 'both screens show the same code');
+    await phone.approveLink(inspected);
+
+    expect(await waiting, isTrue);
+    expect(laptop.phase, Phase.unlocked);
+    expect(laptop.session!.email, qrEmail);
+    expect(laptop.records.single.title, 'Co-op Bank');
+    expect(laptop.records.single.password, 'coop-pass');
+
+    // The laptop's own file still needs the master password after locking.
+    laptop.lock();
+    await expectLater(laptop.unlock('wrong master password'), throwsA(anything));
+    await laptop.unlock(master);
+    expect(laptop.records.single.title, 'Co-op Bank');
+
+    // A used QR cannot be approved again.
+    await expectLater(phone.inspectLink(link.qr), throwsA(anything));
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
 }
