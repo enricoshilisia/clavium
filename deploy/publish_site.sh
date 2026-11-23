@@ -16,10 +16,11 @@ trap 'rm -rf "$work"' EXIT
 (cd "$repo/mobile" && ./tool/build_web.sh >/dev/null)
 
 # 2. Release assets.
-asset_url() { # tag, filename regex
+asset_url() { # tag, filename regex -> newest matching asset
   curl -fsS "$gh_api/$1" | python3 -c "import sys,json,re
-for a in json.load(sys.stdin)['assets']:
-    if re.search(sys.argv[1], a['name']): print(a['browser_download_url']); break" "$2"
+m=[a for a in json.load(sys.stdin)['assets'] if re.search(sys.argv[1], a['name'])]
+m.sort(key=lambda a: a['updated_at'], reverse=True)
+print(m[0]['browser_download_url'] if m else '')" "$2"
 }
 exe=$(asset_url desktop-latest '\.exe$')
 msi=$(asset_url desktop-latest '\.msi$')

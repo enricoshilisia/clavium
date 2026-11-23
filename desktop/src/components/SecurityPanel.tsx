@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { errorMessage, vaultChangeMasterPassword, vaultCreateRecoveryKey, vaultHealth } from "../api";
+import { unlockInfo } from "../sync";
 import type { HealthReport, VaultRecord } from "../types";
 
 interface Props {
@@ -8,9 +9,10 @@ interface Props {
   onClose: () => void;
   onOpen: (id: string) => void;
   onChanged: () => void;
+  minPasswordLength: number;
 }
 
-export default function SecurityPanel({ records, onClose, onOpen, onChanged }: Props) {
+export default function SecurityPanel({ records, onClose, onOpen, onChanged, minPasswordLength }: Props) {
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -30,8 +32,10 @@ export default function SecurityPanel({ records, onClose, onOpen, onChanged }: P
     setError(null);
     setNotice(null);
     if (pw1 !== pw2) return setError("The two passwords do not match.");
+    if (pw1.length < minPasswordLength) return setError(`Use at least ${minPasswordLength} characters.`);
     try {
       await vaultChangeMasterPassword(pw1);
+      unlockInfo.passwordLength = pw1.length;
       setPw1("");
       setPw2("");
       setNotice("Master password changed.");

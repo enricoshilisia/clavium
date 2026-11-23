@@ -44,6 +44,11 @@ shared_vault_urlpatterns = [
         name="shared-vault-snapshot-list-create",
     ),
     path(
+        "<uuid:org_id>/shared-vaults/<uuid:vault_id>/rotate/",
+        shared_views.SharedVaultRotateView.as_view(),
+        name="shared-vault-rotate",
+    ),
+    path(
         "<uuid:org_id>/shared-vaults/<uuid:vault_id>/snapshots/latest/",
         shared_views.SharedSnapshotLatestView.as_view(),
         name="shared-vault-snapshot-latest",

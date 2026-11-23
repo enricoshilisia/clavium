@@ -58,7 +58,7 @@ class SharedVaultSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SharedVault
-        fields = ["id", "name", "created_by_email", "grant_count", "created_at"]
+        fields = ["id", "name", "created_by_email", "grant_count", "created_at", "key_version", "needs_rotation"]
 
 
 class GrantableDeviceSerializer(serializers.Serializer):
@@ -105,6 +105,10 @@ class WrappedVaultKeySerializer(serializers.ModelSerializer):
 
 class SharedSnapshotUploadSerializer(serializers.Serializer):
     blob = serializers.CharField(write_only=True)
+    # The key version the blob is sealed under. Required once a vault has
+    # ever been rotated or flagged; older clients that omit it are refused
+    # whenever a rotation is pending.
+    key_version = serializers.IntegerField(required=False, min_value=1)
 
     def validate_blob(self, value):
         try:

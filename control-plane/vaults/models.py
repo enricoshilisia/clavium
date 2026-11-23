@@ -51,6 +51,12 @@ class SharedVault(models.Model):
     name = models.CharField(max_length=200)
     created_by = models.ForeignKey(Account, related_name="shared_vaults_created", on_delete=models.PROTECT)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Increments each time the vault's key is replaced. Uploads must name
+    # the current key version, so nothing new is ever sealed under a key a
+    # removed member had.
+    key_version = models.PositiveIntegerField(default=1)
+    # Set when someone with access is removed; cleared by a rotation.
+    needs_rotation = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.organization.name})"

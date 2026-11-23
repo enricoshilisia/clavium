@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "orgs",
     "vaults",
     "sync",
+    "scim",
+    "console",
 ]
 
 MIDDLEWARE = [

@@ -46,6 +46,12 @@ class AppState extends ChangeNotifier {
   String? syncNotice;
 
   int autoLockSeconds = 60;
+
+  /// Effective organization policy (strictest across the person's orgs),
+  /// refreshed after each sync. Empty when not in any organization.
+  Map<String, dynamic> policy = {};
+  int? _unlockPasswordLength;
+  DateTime? _lastHealthReport;
   bool biometricEnabled = false;
   DateTime? _backgroundedAt;
   bool _liveLoopRunning = false;
@@ -70,12 +76,14 @@ class AppState extends ChangeNotifier {
   // ---------- lock / unlock ----------
 
   Future<void> createVault(String masterPassword) async {
+    _unlockPasswordLength = masterPassword.length;
     final res = await Core.run('create', {'master_password': masterPassword});
     await _persist(res);
     await _afterUnlock();
   }
 
   Future<void> unlock(String masterPassword) async {
+    _unlockPasswordLength = masterPassword.length;
     final file = await storage.readVault();
     final res = await Core.run('open', {'file': file, 'master_password': masterPassword});
     // A v1 file opened here is upgraded; write the v3 form back at once.
@@ -115,6 +123,7 @@ class AppState extends ChangeNotifier {
 
   void lock() {
     _syncDebounce?.cancel();
+    _unlockPasswordLength = null;
     Core.call('lock');
     records = [];
     categories = [];
@@ -129,11 +138,57 @@ class AppState extends ChangeNotifier {
   void onResumed() {
     final at = _backgroundedAt;
     _backgroundedAt = null;
-    if (phase == Phase.unlocked && at != null && autoLockSeconds >= 0 &&
-        DateTime.now().difference(at).inSeconds >= autoLockSeconds) {
+    if (phase == Phase.unlocked && at != null && DateTime.now().difference(at).inSeconds >= effectiveAutoLockSeconds) {
       lock();
     } else if (phase == Phase.unlocked && session != null) {
       unawaited(syncNow());
+    }
+  }
+
+  /// The person's auto-lock choice, capped by organization policy.
+  int get effectiveAutoLockSeconds {
+    final maxMin = (policy['max_auto_lock_minutes'] as int?) ?? 0;
+    return maxMin > 0 && autoLockSeconds > maxMin * 60 ? maxMin * 60 : autoLockSeconds;
+  }
+
+  /// Things the organization asks for that this vault does not meet yet.
+  List<String> get policyNotices {
+    final out = <String>[];
+    final min = (policy['min_master_password_length'] as int?) ?? 0;
+    final orgs = ((policy['organizations'] as List?) ?? const []).join(', ');
+    if (_unlockPasswordLength != null && _unlockPasswordLength! < min) {
+      out.add('$orgs requires a master password of at least $min characters. Change it in Settings.');
+    }
+    if (policy['require_recovery_key'] == true && phase == Phase.unlocked && !slots().any((s) => s['kind'] == 'recovery')) {
+      out.add('$orgs asks you to create a recovery key. Do it in Settings.');
+    }
+    return out;
+  }
+
+  bool get exportAllowed => policy['allow_export'] != false;
+
+  Future<void> _afterSync(AccountSession s) async {
+    try {
+      policy = await api.getPolicy(s);
+    } catch (_) {
+      // Keep the last known policy when offline.
+    }
+    final now = DateTime.now();
+    if (_lastHealthReport == null || now.difference(_lastHealthReport!).inMinutes >= 30) {
+      try {
+        final h = health();
+        final reused = (h['reused'] as List).fold<int>(0, (n, g) => n + (g as List).length);
+        await api.reportHealth(s, {
+          'score': h['score'],
+          'total': h['with_password'],
+          'weak': (h['weak'] as List).length,
+          'reused': reused,
+          'old': (h['old'] as List).length,
+          'without_totp': (h['without_totp'] as List).length,
+          'has_recovery_key': slots().any((x) => x['kind'] == 'recovery'),
+        });
+        _lastHealthReport = now;
+      } catch (_) {}
     }
   }
 
@@ -325,6 +380,7 @@ class AppState extends ChangeNotifier {
       syncNotice = out.notice;
       lastSync = DateTime.now();
       if (out.pulled > 0) refresh();
+      await _afterSync(s);
     } on ApiException catch (e) {
       syncError = e.message;
       if (e.status == 401) {
@@ -408,6 +464,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> changeMasterPassword(String newPassword) async {
+    final min = (policy['min_master_password_length'] as int?) ?? 10;
+    if (newPassword.length < min) {
+      throw CoreException('Your organization requires at least $min characters.');
+    }
+    _unlockPasswordLength = newPassword.length;
     await _persist(await Core.run('change_master_password', {'new_password': newPassword}));
     unawaited(syncNow());
   }
@@ -415,6 +476,7 @@ class AppState extends ChangeNotifier {
   Future<String> createRecoveryKey() async {
     final res = Core.call('add_recovery_key') as Map;
     await _persist(res);
+    _lastHealthReport = null;
     unawaited(syncNow());
     return res['recovery_key'] as String;
   }

@@ -1,7 +1,7 @@
 // Desktop sync: the same protocol as the mobile app. The browser side only
 // moves ciphertext; Rust (via Tauri) decrypts, merges and decides.
-import { getKeyring, pullItems, pushItems, putKeyring, type AccountSession } from "./account";
-import { syncApplyPull, syncKeyringHeader, syncMarkPushed, syncState } from "./api";
+import { getKeyring, getPolicy, pullItems, pushItems, putKeyring, reportHealth, type AccountSession, type Policy } from "./account";
+import { syncApplyPull, syncKeyringHeader, syncMarkPushed, syncState, vaultHealth } from "./api";
 import type { EncryptedItem } from "./types";
 
 const KEYRING_REV = "clavium.sync.keyringRevision";
@@ -97,4 +97,57 @@ export async function syncNow(session: AccountSession): Promise<SyncOutcome> {
 
 export function forgetKeyringRevision() {
   localStorage.removeItem(KEYRING_REV);
+}
+
+// ---- organization policy (cached so auto-lock can read it) ----
+
+const POLICY_KEY = "clavium.policy";
+let lastHealthReport = 0;
+
+/** Length of the master password used at the last unlock (never the password). */
+export const unlockInfo = { passwordLength: 0 };
+
+export function cachedPolicy(): Policy | null {
+  try {
+    return JSON.parse(localStorage.getItem(POLICY_KEY) ?? "null");
+  } catch {
+    return null;
+  }
+}
+
+export async function afterSync(session: AccountSession, hasRecoveryKey: boolean): Promise<Policy | null> {
+  try {
+    localStorage.setItem(POLICY_KEY, JSON.stringify(await getPolicy(session)));
+  } catch {
+    // offline: keep the last known policy
+  }
+  if (Date.now() - lastHealthReport > 30 * 60_000) {
+    try {
+      const h = await vaultHealth();
+      await reportHealth(session, {
+        score: h.score,
+        total: h.with_password,
+        weak: h.weak.length,
+        reused: h.reused.reduce((n, g) => n + g.length, 0),
+        old: h.old.length,
+        without_totp: h.without_totp.length,
+        has_recovery_key: hasRecoveryKey,
+      });
+      lastHealthReport = Date.now();
+    } catch {
+      // reported next time
+    }
+  }
+  return cachedPolicy();
+}
+
+export function policyNotices(policy: Policy | null, hasRecoveryKey: boolean): string[] {
+  if (!policy || policy.organizations.length === 0) return [];
+  const orgs = policy.organizations.join(", ");
+  const out: string[] = [];
+  if (unlockInfo.passwordLength && unlockInfo.passwordLength < policy.min_master_password_length) {
+    out.push(`${orgs} requires a master password of at least ${policy.min_master_password_length} characters. Change it under Security.`);
+  }
+  if (policy.require_recovery_key && !hasRecoveryKey) out.push(`${orgs} asks you to create a recovery key under Security.`);
+  return out;
 }

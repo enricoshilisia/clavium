@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { vaultLock } from "./api";
+import { cachedPolicy } from "./sync";
 import UnlockScreen from "./components/UnlockScreen";
 import VaultView from "./components/VaultView";
 import type { VaultRecord } from "./types";
@@ -35,7 +36,10 @@ function App() {
     ACTIVITY_EVENTS.forEach((event) => window.addEventListener(event, markActive));
 
     const interval = setInterval(() => {
-      if (Date.now() - lastActivity.current > AUTO_LOCK_MINUTES * 60_000) {
+      // An organization policy can only make the idle timeout shorter.
+      const max = cachedPolicy()?.max_auto_lock_minutes ?? 0;
+      const minutes = max > 0 ? Math.min(AUTO_LOCK_MINUTES, max) : AUTO_LOCK_MINUTES;
+      if (Date.now() - lastActivity.current > minutes * 60_000) {
         lock();
       }
     }, 5_000);

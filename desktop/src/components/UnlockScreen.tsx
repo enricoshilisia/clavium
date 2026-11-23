@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { getKeyring, type AccountSession } from "../account";
 import { defaultVaultPath, errorMessage, vaultCreate, vaultExists, vaultListRecords, vaultRestoreFromKeyring, vaultUnlock } from "../api";
-import { pull } from "../sync";
+import { pull, unlockInfo } from "../sync";
 import { LoggedOut } from "./AccountPanel";
 import type { VaultRecord } from "../types";
 import logo from "../assets/clavium-logo.png";
@@ -42,6 +42,7 @@ export default function UnlockScreen({ onUnlocked }: Props) {
     setBusy(true);
     try {
       const records = await vaultUnlock(path, password);
+      unlockInfo.passwordLength = password.length;
       onUnlocked(records);
     } catch (err) {
       setError(errorMessage(err));
@@ -65,6 +66,7 @@ export default function UnlockScreen({ onUnlocked }: Props) {
     setBusy(true);
     try {
       await vaultCreate(path, password);
+      unlockInfo.passwordLength = password.length;
       onUnlocked([]);
     } catch (err) {
       setError(errorMessage(err));
@@ -84,6 +86,7 @@ export default function UnlockScreen({ onUnlocked }: Props) {
       await vaultRestoreFromKeyring(path, JSON.stringify(ring.header), password);
       localStorage.setItem("clavium.sync.keyringRevision", String(ring.revision));
       await pull(restoreSession);
+      unlockInfo.passwordLength = password.length;
       onUnlocked(await vaultListRecords());
     } catch (err) {
       setError(errorMessage(err instanceof Error ? err.message : err));

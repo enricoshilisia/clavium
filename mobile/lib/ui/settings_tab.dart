@@ -62,8 +62,11 @@ class SettingsTab extends StatelessWidget {
         ListTile(
           leading: const Icon(Icons.timer_outlined),
           title: const Text('Lock after leaving the app'),
+          subtitle: ((app.policy['max_auto_lock_minutes'] as int?) ?? 0) > 0
+              ? Text('Your organization allows at most ${app.policy['max_auto_lock_minutes']} min')
+              : null,
           trailing: DropdownButton<int>(
-            value: app.autoLockSeconds,
+            value: const [0, 60, 300, 900].contains(app.effectiveAutoLockSeconds) ? app.effectiveAutoLockSeconds : 60,
             underline: const SizedBox(),
             items: const [
               DropdownMenuItem(value: 0, child: Text('Immediately')),

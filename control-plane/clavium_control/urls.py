@@ -10,6 +10,8 @@ urlpatterns = [
     path("api/accounts/", include("accounts.urls")),
     path("api/vaults/", include("vaults.urls")),
     path("api/sync/", include("sync.urls")),
+    path("scim/v2/", include("scim.urls")),
+    path("console/", include("console.urls")),
     path("api/orgs/", include("orgs.urls")),
     # Shared-vault endpoints nest under the same /api/orgs/<org_id>/ prefix
     # as membership and the audit log, even though the models live in the

@@ -198,4 +198,21 @@ export function pushItems(session: AccountSession, vaultId: string, items: unkno
   return apiCall(session, "POST", "/api/sync/items/", { vault_id: vaultId, items });
 }
 
+export interface Policy {
+  min_master_password_length: number;
+  max_auto_lock_minutes: number;
+  allow_export: boolean;
+  require_recovery_key: boolean;
+  organizations: string[];
+}
+
+export function getPolicy(session: AccountSession): Promise<Policy> {
+  return apiCall(session, "GET", "/api/orgs/policy/mine/");
+}
+
+/** Aggregate counts only: never which items or passwords. */
+export function reportHealth(session: AccountSession, counts: Record<string, number | boolean>) {
+  return apiCall(session, "POST", "/api/orgs/health/", counts);
+}
+
 export { CONTROL_PLANE_URL };

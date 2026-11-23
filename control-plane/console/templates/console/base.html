@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Clavium console{% endblock %}</title>
+<style>
+  :root { --bg:#060E1C; --panel:#0A1730; --card:#102244; --raised:#16305C; --border:rgba(154,182,224,.16);
+          --text:#E9EDF5; --dim:#9FB0C9; --faint:#6B7D9A; --blue:#3D74C4; --gold:#C9A227; --danger:#D9534F; --ok:#3FAE6B; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  a { color: var(--blue); }
+  header.top { display:flex; justify-content:space-between; align-items:center; padding:12px 24px; border-bottom:1px solid var(--border); background:var(--panel); }
+  header.top .brand { font-weight:700; letter-spacing:.02em; }
+  header.top .brand span { color: var(--gold); }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--dim); margin: 0 0 20px; }
+  .card { background: var(--card); border:1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 18px; overflow-x: auto; }
+  .stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat { background: var(--card); border:1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .stat b { display:block; font-size: 26px; font-weight: 400; }
+  .stat span { color: var(--dim); font-size: 12px; }
+  .stat.warn b { color: var(--gold); }
+  table { width:100%; border-collapse: collapse; }
+  th, td { text-align:left; padding: 8px 6px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--faint); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+  input, select { background: var(--panel); color: var(--text); border:1px solid var(--border); border-radius: 8px; padding: 7px 9px; font: inherit; }
+  button, .btn { background: var(--raised); color: var(--text); border:1px solid var(--border); border-radius: 8px; padding: 7px 12px; font: inherit; cursor: pointer; text-decoration:none; display:inline-block; }
+  button.primary { background: var(--blue); border-color: var(--blue); }
+  button.gold { background: var(--gold); color: var(--bg); border-color: var(--gold); font-weight: 600; }
+  button.danger { color: #ffb3b1; border-color: rgba(217,83,79,.5); background: transparent; }
+  form.inline { display:inline-flex; gap:6px; align-items:center; margin:0; flex-wrap: wrap; }
+  .row { display:flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .row label { display:flex; flex-direction:column; gap:4px; color: var(--dim); font-size: 12px; }
+  .msg { padding: 10px 14px; border-radius: 8px; margin-bottom: 12px; background: var(--raised); }
+  .msg.error { background: rgba(217,83,79,.18); }
+  .msg.success { background: rgba(63,174,107,.18); }
+  .secret { background: rgba(201,162,39,.12); border:1px solid rgba(201,162,39,.5); border-radius: 10px; padding: 14px; margin-bottom: 18px; }
+  .secret code { display:block; margin: 8px 0; font-size: 14px; word-break: break-all; color: var(--gold); }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--raised); color: var(--dim); }
+  .pill.gold { color: var(--bg); background: var(--gold); }
+  .score-good { color: var(--ok); } .score-ok { color: var(--gold); } .score-bad { color: var(--danger); }
+  .faint { color: var(--faint); }
+  .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .auth { max-width: 380px; margin: 10vh auto; }
+  .auth form { display:flex; flex-direction:column; gap: 10px; }
+  code.mono { font-size: 12px; color: var(--dim); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Clavium <span>console</span></div>
+  {% if user.is_authenticated %}<div><span class="faint">{{ user.email }}</span> &nbsp; <a href="{% url 'console-logout' %}">Sign out</a></div>{% endif %}
+</header>
+<main>
+  {% for m in messages %}<div class="msg {{ m.tags }}">{{ m }}</div>{% endfor %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -175,6 +175,10 @@ class GrantRevokeView(APIView):
 
         device_account_email = grant.device.account.email
         grant.delete()
+        # The device had the key; anything sealed under it from now on must
+        # use a new one.
+        shared_vault.needs_rotation = True
+        shared_vault.save(update_fields=["needs_rotation"])
         AuditLogEntry.record(
             organization=org,
             actor=request.user,
@@ -220,6 +224,18 @@ class SharedSnapshotListCreateView(APIView):
         serializer = SharedSnapshotUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         blob = serializer.validated_data["blob"]
+        key_version = serializer.validated_data.get("key_version")
+
+        if shared_vault.needs_rotation:
+            return Response(
+                {"detail": "someone with access was removed; rotate this vault's key before saving to it", "key_version": shared_vault.key_version},
+                status=409,
+            )
+        if key_version is not None and key_version != shared_vault.key_version:
+            return Response(
+                {"detail": "this vault's key was rotated; fetch your new wrapped key first", "key_version": shared_vault.key_version},
+                status=409,
+            )
 
         with transaction.atomic():
             last_version = (
@@ -253,3 +269,68 @@ class SharedSnapshotLatestView(APIView):
         if snapshot is None:
             return Response({"detail": "no snapshot has been uploaded yet"}, status=404)
         return Response(SharedVaultSnapshotDetailSerializer(snapshot).data)
+
+
+class SharedVaultRotateView(APIView):
+    """Replace a shared vault's key in one step: every grant is replaced
+    by copies of the NEW key (wrapped client-side for each device that
+    should keep access), the content is re-sealed under it, and the key
+    version moves on. Old wrapped keys are gone, so a removed member's
+    copy of the old key opens nothing written after this point.
+
+    Body: {"key_version": current + 1,
+           "grants": [{"device_id": ..., "wrapped_key": base64}, ...],
+           "blob": base64 sealed under the new key}
+    """
+
+    def post(self, request, org_id, vault_id):
+        org = get_object_or_404(Organization, id=org_id)
+        membership, denied = _require_active_member(org, request.user)
+        if denied:
+            return denied
+        if membership.role not in (Membership.Role.OWNER, Membership.Role.ADMIN):
+            return Response({"detail": "owner or admin role required"}, status=403)
+
+        upload = SharedSnapshotUploadSerializer(data={"blob": request.data.get("blob", "")})
+        upload.is_valid(raise_exception=True)
+        blob = upload.validated_data["blob"]
+        grants_in = request.data.get("grants") or []
+        if not isinstance(grants_in, list) or not grants_in:
+            return Response({"detail": "at least one grant is required"}, status=400)
+
+        parsed = []
+        for g in grants_in:
+            gs = GrantCreateSerializer(data=g)
+            gs.is_valid(raise_exception=True)
+            device = Device.objects.filter(id=gs.validated_data["device_id"], revoked_at__isnull=True).select_related("account").first()
+            if device is None:
+                return Response({"detail": f"device {g.get('device_id')} not found or revoked"}, status=400)
+            member, _ = _require_active_member(org, device.account)
+            if member is None:
+                return Response({"detail": f"{device.account.email} is not an active member"}, status=400)
+            parsed.append((device, gs.validated_data["wrapped_key"]))
+
+        with transaction.atomic():
+            sv = SharedVault.objects.select_for_update().get(id=vault_id, organization=org)
+            if request.data.get("key_version") != sv.key_version + 1:
+                return Response({"detail": "key_version must be the current version + 1", "key_version": sv.key_version}, status=409)
+            sv.wrapped_keys.all().delete()
+            for device, wrapped in parsed:
+                WrappedVaultKey.objects.create(shared_vault=sv, device=device, wrapped_key=wrapped, granted_by=request.user)
+            last = sv.snapshots.order_by("-version").values_list("version", flat=True).first() or 0
+            snapshot = SharedVaultSnapshot.objects.create(
+                shared_vault=sv,
+                version=last + 1,
+                blob=blob,
+                sha256=hashlib.sha256(blob).hexdigest(),
+                size_bytes=len(blob),
+                uploaded_by=request.auth,
+            )
+            sv.key_version += 1
+            sv.needs_rotation = False
+            sv.save(update_fields=["key_version", "needs_rotation"])
+            AuditLogEntry.record(
+                organization=org, actor=request.user, action="vault_key.rotated", obj=sv,
+                key_version=sv.key_version, devices=len(parsed), snapshot_version=snapshot.version,
+            )
+        return Response({"key_version": sv.key_version, "snapshot_version": snapshot.version, "grants": len(parsed)})

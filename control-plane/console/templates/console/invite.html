@@ -1,0 +1,22 @@
+{% extends "console/base.html" %}
+{% block title %}Join Clavium{% endblock %}
+{% block content %}
+<div class="auth card">
+{% if invalid %}
+  <h1>Link expired</h1><p class="sub">This invite link was already used or is more than 7 days old. Ask your administrator for a new one.</p>
+{% elif done %}
+  <h1>You are set up</h1>
+  <p class="sub">Your account password for <strong>{{ inv.account.email }}</strong> is saved. Next, install Clavium and choose "Turn on sync" (or "I already use Clavium") to sign in with this email and password.</p>
+  <p class="sub">When you create your vault you will choose a separate master password. Your organization requires it to meet its policy; nobody, including your administrator, can see it or reset it.</p>
+  <a class="btn" href="https://clavium.172-169-233-189.sslip.io/download/">Download Clavium</a>
+{% else %}
+  <h1>Join {{ inv.organization.name }}</h1>
+  <p class="sub">Choose an account password for <strong>{{ inv.account.email }}</strong>. It signs you in to Clavium; it is not your vault's master password.</p>
+  <form method="post">{% csrf_token %}
+    <input name="password" type="password" placeholder="Account password (10+ characters)" minlength="10" required autofocus>
+    <input name="password2" type="password" placeholder="Type it again" required>
+    <button class="primary" type="submit">Save password</button>
+  </form>
+{% endif %}
+</div>
+{% endblock %}

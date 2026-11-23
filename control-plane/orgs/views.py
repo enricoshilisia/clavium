@@ -5,7 +5,8 @@ from rest_framework.views import APIView
 
 from accounts.models import Account
 
-from .models import AuditLogEntry, Membership, Organization
+from .models import AuditLogEntry, HealthSnapshot, Membership, Organization, OrgPolicy
+from .services import is_last_owner, offboard
 from .serializers import (
     AuditLogEntrySerializer,
     MemberAddSerializer,
@@ -129,35 +130,16 @@ class MemberRemoveView(APIView):
         membership = get_object_or_404(Membership, id=membership_id, organization=org)
         if not membership.is_active:
             return Response({"detail": "already removed"}, status=400)
-        if membership.role == Membership.Role.OWNER:
-            remaining_owners = Membership.objects.filter(
-                organization=org, role=Membership.Role.OWNER, removed_at__isnull=True
-            ).exclude(id=membership.id)
-            if not remaining_owners.exists():
-                return Response(
-                    {"detail": "cannot remove the organization's last owner"}, status=400
-                )
-
-        from vaults.models import WrappedVaultKey  # avoid a module-load-time cycle with vaults
-
-        revoked_grants = WrappedVaultKey.objects.filter(
-            shared_vault__organization=org, device__account=membership.account
+        if is_last_owner(org, membership):
+            return Response({"detail": "cannot remove the organization's last owner"}, status=400)
+        result = offboard(
+            org,
+            membership,
+            request.user,
+            revoke_devices=bool(request.data.get("revoke_devices", False)),
+            source="api",
         )
-        revoked_count = revoked_grants.count()
-        revoked_grants.delete()
-
-        membership.removed_at = timezone.now()
-        membership.save(update_fields=["removed_at"])
-
-        AuditLogEntry.record(
-            organization=org,
-            actor=request.user,
-            action="member.removed",
-            obj=membership,
-            member_email=membership.account.email,
-            shared_vault_grants_revoked=revoked_count,
-        )
-        return Response({"shared_vault_grants_revoked": revoked_count}, status=200)
+        return Response(result, status=200)
 
 
 class AuditLogView(APIView):
@@ -168,3 +150,65 @@ class AuditLogView(APIView):
 
         entries = org.audit_entries.all()[:200]
         return Response(AuditLogEntrySerializer(entries, many=True).data)
+
+
+class MyPolicyView(APIView):
+    """The effective policy for the signed-in account (strictest across all
+    of its organizations). Apps fetch this after each sync."""
+
+    def get(self, request):
+        return Response(OrgPolicy.effective_for(request.user))
+
+
+class OrgPolicyView(APIView):
+    FIELDS = ("min_master_password_length", "max_auto_lock_minutes", "allow_export", "require_recovery_key")
+
+    def get(self, request, org_id):
+        org = get_object_or_404(Organization, id=org_id)
+        if _active_membership(org, request.user) is None:
+            return Response({"detail": "not a member of this organization"}, status=404)
+        policy, _ = OrgPolicy.objects.get_or_create(organization=org)
+        return Response(policy.as_dict())
+
+    def put(self, request, org_id):
+        org = get_object_or_404(Organization, id=org_id)
+        denied = _require_admin(org, request.user)
+        if denied:
+            return denied
+        policy, _ = OrgPolicy.objects.get_or_create(organization=org)
+        errors = {}
+        for f in self.FIELDS:
+            if f not in request.data:
+                continue
+            v = request.data[f]
+            if f in ("allow_export", "require_recovery_key"):
+                if not isinstance(v, bool):
+                    errors[f] = "must be true or false"
+                    continue
+            else:
+                if not isinstance(v, int) or v < 0 or (f == "min_master_password_length" and not 8 <= v <= 128) or v > 1440:
+                    errors[f] = "out of range"
+                    continue
+            setattr(policy, f, v)
+        if errors:
+            return Response(errors, status=400)
+        policy.updated_by = request.user
+        policy.save()
+        AuditLogEntry.record(organization=org, actor=request.user, action="policy.updated", obj=policy, **policy.as_dict())
+        return Response(policy.as_dict())
+
+
+class HealthReportView(APIView):
+    """An app reports its vault's aggregate health. Counts only."""
+
+    def post(self, request):
+        fields = ("score", "total", "weak", "reused", "old", "without_totp")
+        data = {}
+        for f in fields:
+            v = request.data.get(f)
+            if not isinstance(v, int) or v < 0 or v > 1_000_000 or (f == "score" and v > 100):
+                return Response({f: "must be a non-negative integer"}, status=400)
+            data[f] = v
+        data["has_recovery_key"] = bool(request.data.get("has_recovery_key", False))
+        HealthSnapshot.objects.update_or_create(account=request.user, defaults=data)
+        return Response(status=204)

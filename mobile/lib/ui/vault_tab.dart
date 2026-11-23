@@ -78,6 +78,13 @@ class VaultTab extends StatelessWidget {
                   () => app.setCategoryFilter(app.categoryFilter == c.slug ? null : c.slug)),
           ]),
         ),
+        for (final n in app.policyNotices)
+          MaterialBanner(
+            backgroundColor: ClvColors.navy800,
+            leading: const Icon(Icons.policy_outlined, color: ClvColors.gold500),
+            content: Text(n),
+            actions: const [SizedBox.shrink()],
+          ),
         if (app.syncNotice != null)
           MaterialBanner(content: Text(app.syncNotice!), actions: [TextButton(onPressed: () {}, child: const Text('OK'))]),
         Expanded(

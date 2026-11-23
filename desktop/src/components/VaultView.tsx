@@ -13,7 +13,9 @@ import {
   vaultUpdateRecord,
 } from "../api";
 import { fieldLabel, KIND_BADGE, KIND_LABELS, SECRET_FIELDS } from "../labels";
-import { pull, syncNow } from "../sync";
+import { afterSync, cachedPolicy, policyNotices, pull, syncNow } from "../sync";
+import { vaultHasRecoveryKey } from "../api";
+import type { Policy } from "../account";
 import type { CategoryInfo, KindInfo, RecordInput, VaultRecord } from "../types";
 import logo from "../assets/clavium-logo.png";
 import AccountPanel from "./AccountPanel";
@@ -52,6 +54,13 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   const again = useRef(false);
   const alive = useRef(true);
 
+  const [policy, setPolicy] = useState<Policy | null>(() => cachedPolicy());
+  const [hasRecovery, setHasRecovery] = useState(true);
+  const refreshRecovery = useCallback(() => vaultHasRecoveryKey().then(setHasRecovery).catch(() => {}), []);
+  useEffect(() => {
+    refreshRecovery();
+  }, [refreshRecovery]);
+
   const reload = useCallback(async () => onRecordsChange(await vaultListRecords()), [onRecordsChange]);
 
   const runSync = useCallback(async () => {
@@ -71,6 +80,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           setSyncNotice(out.notice);
           setLastSync(new Date());
           if (out.changed > 0) await reload();
+          setPolicy(await afterSync(s, await vaultHasRecoveryKey().catch(() => false)));
         } catch (e) {
           setSyncError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -302,7 +312,11 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
             setMode("view");
             setPanel(null);
           }}
-          onChanged={changed}
+          onChanged={() => {
+            changed();
+            refreshRecovery();
+          }}
+          minPasswordLength={policy?.min_master_password_length ?? 10}
         />
       )}
 
@@ -319,6 +333,11 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           + New item
         </button>
         {syncNotice && <div className="clv-notice">{syncNotice}</div>}
+        {policyNotices(policy, hasRecovery).map((n) => (
+          <div key={n} className="clv-notice">
+            {n}
+          </div>
+        ))}
         <div className="vault-list clv-scrollbar">
           {filtered.length === 0 && <div className="vault-empty">Nothing here.</div>}
           {filtered.map((record) => (

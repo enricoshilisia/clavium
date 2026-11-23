@@ -118,6 +118,12 @@ export function vaultRestoreFromKeyring(path: string, header: string, masterPass
   return invoke("vault_restore_from_keyring", { path, header, masterPassword });
 }
 
+/** True when the vault has a recovery-key slot (read from the keyring header). */
+export async function vaultHasRecoveryKey(): Promise<boolean> {
+  const header = JSON.parse(await invoke<string>("sync_keyring_header"));
+  return (header.slots as { kind: string }[]).some((s) => s.kind === "recovery");
+}
+
 export function syncKeyringHeader(): Promise<string> {
   return invoke("sync_keyring_header");
 }

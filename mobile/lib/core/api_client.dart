@@ -117,6 +117,13 @@ class ApiClient {
       await _send('POST', s.server, '/api/sync/items/',
           token: s.token, body: {'vault_id': vaultId, 'items': items}) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> getPolicy(AccountSession s) async =>
+      await _send('GET', s.server, '/api/orgs/policy/mine/', token: s.token) as Map<String, dynamic>;
+
+  /// Aggregate counts only: never which items or passwords.
+  Future<void> reportHealth(AccountSession s, Map<String, dynamic> counts) =>
+      _send('POST', s.server, '/api/orgs/health/', token: s.token, body: counts);
+
   Future<void> resetSync(AccountSession s, String accountPassword) =>
       _send('POST', s.server, '/api/sync/reset/', token: s.token, body: {'password': accountPassword});
 }

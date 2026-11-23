@@ -1,0 +1,12 @@
+{% extends "console/base.html" %}
+{% block content %}
+<div class="auth card">
+  <h1>Sign in</h1>
+  <p class="sub">For organization owners and admins. Use your Clavium account email and account password (not your master password).</p>
+  <form method="post">{% csrf_token %}
+    <input name="email" type="email" placeholder="Email" required autofocus>
+    <input name="password" type="password" placeholder="Account password" required>
+    <button class="primary" type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}

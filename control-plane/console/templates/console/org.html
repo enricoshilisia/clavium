@@ -1,0 +1,108 @@
+{% extends "console/base.html" %}
+{% block title %}{{ org.name }} · Clavium console{% endblock %}
+{% block content %}
+<h1>{{ org.name }}</h1>
+<p class="sub">You are {{ me.get_role_display|lower }}. Vault contents are end-to-end encrypted; this console only sees accounts, devices and the numbers apps report.</p>
+
+{% if new_secret %}
+<div class="secret"><strong>{{ new_secret.title }}</strong><code id="secret">{{ new_secret.value }}</code><span class="faint">{{ new_secret.help }}</span></div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><b>{{ members|length }}</b><span>members</span></div>
+  <div class="stat"><b>{{ devices|length }}</b><span>signed-in devices</span></div>
+  <div class="stat"><b class="{% if avg_health is None %}{% elif avg_health >= 80 %}score-good{% elif avg_health >= 50 %}score-ok{% else %}score-bad{% endif %}">{% if avg_health is None %}–{% else %}{{ avg_health }}{% endif %}</b><span>average password health ({{ reported }} reporting)</span></div>
+  <div class="stat {% if rotation_needed %}warn{% endif %}"><b>{{ rotation_needed }}</b><span>shared vaults awaiting key rotation</span></div>
+</div>
+
+<div class="card">
+  <h2>Members</h2>
+  <table>
+    <tr><th>Email</th><th>Role</th><th>Health</th><th>Devices</th><th>Recovery key</th><th></th></tr>
+    {% for m in members %}
+    <tr>
+      <td>{{ m.account.email }} {% if m.scim_managed %}<span class="pill">SCIM</span>{% endif %} {% if m.pending_invite %}<span class="pill gold">invite pending</span>{% endif %}</td>
+      <td>
+        <form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}
+          <input type="hidden" name="action" value="change_role"><input type="hidden" name="membership_id" value="{{ m.id }}">
+          <select name="role" onchange="this.form.submit()">{% for v, l in roles %}<option value="{{ v }}" {% if v == m.role %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+        </form>
+      </td>
+      <td>{% if m.health %}<span class="{% if m.health.score >= 80 %}score-good{% elif m.health.score >= 50 %}score-ok{% else %}score-bad{% endif %}">{{ m.health.score }}</span> <span class="faint">{{ m.health.weak }} weak · {{ m.health.reused }} reused</span>{% else %}<span class="faint">not reported</span>{% endif %}</td>
+      <td>{{ m.active_devices }}</td>
+      <td>{% if m.health %}{% if m.health.has_recovery_key %}yes{% else %}<span class="score-ok">no</span>{% endif %}{% else %}<span class="faint">–</span>{% endif %}</td>
+      <td style="white-space:nowrap">
+        {% if m.pending_invite %}<form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="invite_link"><input type="hidden" name="membership_id" value="{{ m.id }}"><button type="submit">Invite link</button></form>{% endif %}
+        <form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="signout_all"><input type="hidden" name="membership_id" value="{{ m.id }}"><button type="submit">Sign out everywhere</button></form>
+        <form class="inline" method="post" action="{% url 'console-action' org.id %}" onsubmit="return confirm('Remove {{ m.account.email }} from {{ org.name }}?')">{% csrf_token %}<input type="hidden" name="action" value="remove_member"><input type="hidden" name="membership_id" value="{{ m.id }}"><label class="faint"><input type="checkbox" name="revoke_devices" checked> sign out</label><button class="danger" type="submit">Remove</button></form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <h2 style="margin-top:18px">Add a member</h2>
+  <form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}
+    <input type="hidden" name="action" value="add_member">
+    <input name="email" type="email" placeholder="name@company.com" required>
+    <select name="role">{% for v, l in roles %}<option value="{{ v }}" {% if v == "member" %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+    <button class="gold" type="submit">Add</button>
+  </form>
+  <p class="faint">New people get an invite link to set their account password. Their vault and master password stay theirs alone.</p>
+</div>
+
+<div class="grid2">
+  <div class="card">
+    <h2>Policy</h2>
+    <form method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}
+      <input type="hidden" name="action" value="policy">
+      <div class="row">
+        <label>Minimum master password length<input name="min_master_password_length" type="number" min="8" max="128" value="{{ policy.min_master_password_length }}"></label>
+        <label>Auto-lock at most after (minutes, 0 = no limit)<input name="max_auto_lock_minutes" type="number" min="0" max="1440" value="{{ policy.max_auto_lock_minutes }}"></label>
+      </div>
+      <p><label><input type="checkbox" name="allow_export" {% if policy.allow_export %}checked{% endif %}> Allow exporting vault contents</label></p>
+      <p><label><input type="checkbox" name="require_recovery_key" {% if policy.require_recovery_key %}checked{% endif %}> Ask members to create a recovery key</label></p>
+      <button class="primary" type="submit">Save policy</button>
+    </form>
+    <p class="faint">Apps apply the strictest policy of every organization a person belongs to.</p>
+  </div>
+  <div class="card">
+    <h2>Provisioning (SCIM 2.0)</h2>
+    <p class="sub">Connect Microsoft Entra ID, Okta or Google to add and remove members automatically. Removing someone in your directory signs them out of every device and revokes their shared vault access.</p>
+    <p>Tenant URL <code class="mono">{{ scim_base }}</code></p>
+    <table>
+      {% for t in scim_tokens %}<tr><td>{{ t.label }}</td><td class="faint">created {{ t.created_at|date:"Y-m-d" }}{% if t.last_used_at %}, used {{ t.last_used_at|timesince }} ago{% endif %}</td>
+        <td><form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="scim_revoke"><input type="hidden" name="token_id" value="{{ t.id }}"><button class="danger" type="submit">Revoke</button></form></td></tr>
+      {% empty %}<tr><td class="faint">No tokens yet.</td></tr>{% endfor %}
+    </table>
+    <form class="inline" method="post" action="{% url 'console-action' org.id %}" style="margin-top:10px">{% csrf_token %}
+      <input type="hidden" name="action" value="scim_create"><input name="label" placeholder="e.g. Entra ID">
+      <button type="submit">Create token</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Signed-in devices</h2>
+  <table>
+    <tr><th>Member</th><th>Device</th><th>Platform</th><th>Last seen</th><th></th></tr>
+    {% for d in devices %}
+    <tr><td>{{ d.account.email }}</td><td>{{ d.name }}</td><td>{{ d.platform }}</td><td>{% if d.last_seen_at %}{{ d.last_seen_at|timesince }} ago{% else %}<span class="faint">never</span>{% endif %}</td>
+      <td><form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="revoke_device"><input type="hidden" name="device_id" value="{{ d.id }}"><button class="danger" type="submit">Sign out</button></form></td></tr>
+    {% empty %}<tr><td class="faint" colspan="5">No devices.</td></tr>{% endfor %}
+  </table>
+</div>
+
+{% if removed %}
+<div class="card">
+  <h2>Recently removed</h2>
+  <table>{% for m in removed %}<tr><td>{{ m.account.email }}</td><td class="faint">removed {{ m.removed_at|date:"Y-m-d H:i" }}</td></tr>{% endfor %}</table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Audit log</h2>
+  <table>
+    <tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr>
+    {% for e in audit %}<tr><td class="faint" style="white-space:nowrap">{{ e.created_at|date:"Y-m-d H:i" }}</td><td>{% if e.actor %}{{ e.actor.email }}{% else %}<span class="faint">directory (SCIM)</span>{% endif %}</td><td>{{ e.action }}</td><td><code class="mono">{{ e.metadata }}</code></td></tr>{% endfor %}
+  </table>
+</div>
+{% endblock %}

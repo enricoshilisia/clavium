@@ -1,0 +1,15 @@
+{% extends "console/base.html" %}
+{% block content %}
+<h1>Your organizations</h1>
+<p class="sub">Choose one to manage, or create a new one. You become its owner.</p>
+<div class="card">
+  {% for o in orgs %}<p><a href="{% url 'console-org' o.id %}">{{ o.name }}</a></p>{% empty %}<p class="faint">You do not manage any organization yet.</p>{% endfor %}
+</div>
+<div class="card">
+  <h2>Create an organization</h2>
+  <form class="inline" method="post" action="{% url 'console-create-org' %}">{% csrf_token %}
+    <input name="name" placeholder="Company name" required>
+    <button class="gold" type="submit">Create</button>
+  </form>
+</div>
+{% endblock %}

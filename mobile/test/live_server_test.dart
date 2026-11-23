@@ -9,6 +9,7 @@ import 'package:clavium/core/app_state.dart';
 import 'package:clavium/core/blob_store_io.dart';
 import 'package:clavium/core/storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 
 import 'app_flow_test.dart' show FakeBiometrics;
 
@@ -82,6 +83,23 @@ void main() {
     sw.stop();
     expect((page['items'] as List).isNotEmpty, isTrue);
     expect(sw.elapsed.inSeconds, lessThan(10), reason: 'long-poll should wake on the push, not time out');
+
+    // Organization policy reaches the app after a sync.
+    final org = jsonDecode((await http.post(Uri.parse('$server/api/orgs/'),
+            headers: {'Authorization': 'Bearer ${s.token}', 'Content-Type': 'application/json'},
+            body: jsonEncode({'name': 'E2E Org'})))
+        .body) as Map<String, dynamic>;
+    final put = await http.put(Uri.parse('$server/api/orgs/${org['id']}/policy/'),
+        headers: {'Authorization': 'Bearer ${s.token}', 'Content-Type': 'application/json'},
+        body: jsonEncode({'min_master_password_length': 40, 'max_auto_lock_minutes': 2, 'require_recovery_key': true}));
+    expect(put.statusCode, 200, reason: put.body);
+    await a.setAutoLock(900);
+    await a.syncNow();
+    expect(a.policy['min_master_password_length'], 40);
+    expect(a.effectiveAutoLockSeconds, 120, reason: 'org caps auto-lock at 2 minutes');
+    expect(a.policyNotices.length, 2, reason: a.policyNotices.join(' | '));
+    await a.createRecoveryKey();
+    expect(a.policyNotices.length, 1);
 
     // The server holds nothing readable.
     final raw = await a.api.pull(s, 0);
