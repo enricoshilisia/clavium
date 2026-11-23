@@ -42,6 +42,9 @@ pub enum VaultError {
     #[error("this vault has no unlocked key; open it with Vault::open first")]
     NoKeyring,
 
+    #[error("this QR code link is invalid, expired, or was not approved by your own device")]
+    LinkInvalid,
+
     #[error("unknown category: {0}")]
     UnknownCategory(String),
 

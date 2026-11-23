@@ -151,6 +151,13 @@ impl Keyring {
         Ok(ring)
     }
 
+    /// A keyring whose key arrived by QR device linking. The caller must
+    /// already have checked the vault id; the key is then proven by the
+    /// first record it decrypts (every item is AES-GCM authenticated).
+    pub fn from_linked_key(header: KeyringHeader, key: VaultKey) -> Self {
+        Keyring { header, key }
+    }
+
     pub fn key(&self) -> &[u8; VAULT_KEY_LEN] {
         &self.key
     }

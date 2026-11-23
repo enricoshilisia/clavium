@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/api_client.dart';
 import '../core/app_state.dart';
 import 'health_screen.dart';
+import 'link_screens.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -31,6 +32,13 @@ class SettingsTab extends StatelessWidget {
             subtitle: Text(app.syncError ??
                 (app.lastSync == null ? 'Not synced yet' : 'Last synced ${TimeOfDay.fromDateTime(app.lastSync!).format(context)}')),
             trailing: IconButton(icon: const Icon(Icons.sync), onPressed: app.syncing ? null : app.syncNow),
+          ),
+          ListTile(
+            key: const Key('link-device'),
+            leading: const Icon(Icons.qr_code_scanner, color: ClvColors.gold500),
+            title: const Text('Sign in another device'),
+            subtitle: const Text('Scan the QR code it shows. No passwords to type.'),
+            onTap: () => scanAndApproveLink(context, app),
           ),
           ListTile(
             leading: const Icon(Icons.logout),

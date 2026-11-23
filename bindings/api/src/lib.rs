@@ -27,6 +27,8 @@ type R = Result<Value, String>;
 #[derive(Default)]
 pub struct Session {
     vault: Option<Vault>,
+    /// A new device waiting for its QR code to be approved.
+    link: Option<clavium_security_core::LinkRequest>,
     /// Weak KDF parameters for automated tests only.
     fast_kdf: bool,
 }
@@ -151,7 +153,7 @@ impl Session {
 
     /// For tests: Argon2 parameters cheap enough to run hundreds of times.
     pub fn with_fast_kdf() -> Self {
-        Self { vault: None, fast_kdf: true }
+        Self { vault: None, link: None, fast_kdf: true }
     }
 
     fn kdf(&self) -> KdfParams {
@@ -436,6 +438,60 @@ impl Session {
                 Ok(json!({ "saved": self.saved()? }))
             }
 
+            // ---- QR device linking ----
+            // New device: make a one-time key pair; the host shows a QR
+            // with `public_key` and `link_secret` and registers only
+            // `public_key` with the server.
+            "link_begin" => {
+                let req = clavium_security_core::LinkRequest::new();
+                let out = json!({
+                    "public_key": req.public_key_b64(),
+                    "link_secret": req.link_secret_b64(),
+                    "code": req.verification_code(),
+                });
+                self.link = Some(req);
+                Ok(out)
+            }
+            // Approving device (unlocked): what to show, from the scanned QR.
+            "link_code" => {
+                let pk: String = arg(a, "public_key")?;
+                let secret: String = arg(a, "link_secret")?;
+                use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+                let pk: [u8; 32] = URL_SAFE_NO_PAD
+                    .decode(pk.trim())
+                    .ok()
+                    .and_then(|v| v.try_into().ok())
+                    .ok_or("that QR code is not a Clavium link")?;
+                let secret = URL_SAFE_NO_PAD.decode(secret.trim()).map_err(|_| "that QR code is not a Clavium link")?;
+                Ok(json!(clavium_security_core::verification_code(&pk, &secret)))
+            }
+            "link_approve" => {
+                let pk: String = arg(a, "public_key")?;
+                let secret: String = arg(a, "link_secret")?;
+                let ring = self.vault()?.keyring().ok_or("vault has no keyring")?;
+                let env = clavium_security_core::seal_for_link(&pk, &secret, ring.vault_id(), ring.key())
+                    .map_err(|e| e.to_string())?;
+                Ok(serde_json::to_value(env).unwrap())
+            }
+            // New device: open the envelope and unlock with the account's
+            // keyring header (fetched with the token the server issued).
+            "link_finish" => {
+                let env: clavium_security_core::LinkEnvelope = arg(a, "envelope")?;
+                let header: KeyringHeader = arg(a, "header")?;
+                let req = self.link.as_ref().ok_or("no device link is in progress")?;
+                let (vault_id, key) = req.open(&env).map_err(|e| e.to_string())?;
+                if vault_id != header.vault_id {
+                    return Err("the approved vault does not match this account's vault".into());
+                }
+                self.link = None;
+                self.vault = Some(Vault::from_keyring(Keyring::from_linked_key(header, key)));
+                self.unlocked_summary()
+            }
+            "link_cancel" => {
+                self.link = None;
+                Ok(Value::Null)
+            }
+
             // ---- sync ----
             "sync_state" => {
                 let v = self.vault()?;
@@ -580,5 +636,60 @@ mod tests {
         call(&mut s, "lock", json!({}));
         call(&mut s, "open", json!({ "file": file, "master_password": "another long password" }));
         assert_eq!(call(&mut s, "slots", json!({})).as_array().unwrap().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod link_tests {
+    use super::*;
+
+    fn call(s: &mut Session, cmd: &str, args: Value) -> Value {
+        let out: Value = serde_json::from_str(&s.handle(&json!({ "cmd": cmd, "args": args }).to_string())).unwrap();
+        if let Some(e) = out.get("error") {
+            panic!("{cmd} failed: {e}");
+        }
+        out["ok"].clone()
+    }
+
+    #[test]
+    fn a_phone_links_a_new_device_by_qr() {
+        let mut phone = Session::with_fast_kdf();
+        call(&mut phone, "create", json!({ "master_password": "a long master password" }));
+        let added = call(&mut phone, "add", json!({ "record": { "title": "KCB", "password": "pw" } }));
+        let st = call(&mut phone, "sync_state", json!({}));
+        let item = st["pending"][0].clone();
+        let _ = added;
+
+        let mut laptop = Session::with_fast_kdf();
+        let qr = call(&mut laptop, "link_begin", json!({}));
+        let code = call(&mut phone, "link_code", json!({ "public_key": qr["public_key"], "link_secret": qr["link_secret"] }));
+        assert_eq!(code, qr["code"], "both screens show the same code");
+        let env = call(&mut phone, "link_approve", json!({ "public_key": qr["public_key"], "link_secret": qr["link_secret"] }));
+        call(&mut laptop, "link_finish", json!({ "envelope": env, "header": st["header"] }));
+
+        // The laptop can now read the phone's records.
+        let mut stored = item.clone();
+        stored["revision"] = json!(1);
+        call(&mut laptop, "sync_apply_pull", json!({ "items": [stored], "cursor": 1 }));
+        assert_eq!(call(&mut laptop, "list", json!({}))[0]["title"], "KCB");
+        // And its file still opens with the master password after locking.
+        let saved = call(&mut laptop, "save", json!({}))["saved"].clone();
+        call(&mut laptop, "lock", json!({}));
+        call(&mut laptop, "open", json!({ "file": saved, "master_password": "a long master password" }));
+    }
+
+    #[test]
+    fn a_link_for_another_vault_is_refused() {
+        let mut phone = Session::with_fast_kdf();
+        call(&mut phone, "create", json!({ "master_password": "a long master password" }));
+        let mut other = Session::with_fast_kdf();
+        call(&mut other, "create", json!({ "master_password": "another long password" }));
+        let other_header = call(&mut other, "sync_state", json!({}))["header"].clone();
+
+        let mut laptop = Session::with_fast_kdf();
+        let qr = call(&mut laptop, "link_begin", json!({}));
+        let env = call(&mut phone, "link_approve", json!({ "public_key": qr["public_key"], "link_secret": qr["link_secret"] }));
+        let out: Value = serde_json::from_str(&laptop.handle(&json!({ "cmd": "link_finish", "args": { "envelope": env, "header": other_header } }).to_string())).unwrap();
+        assert!(out["error"].as_str().unwrap().contains("does not match"));
     }
 }

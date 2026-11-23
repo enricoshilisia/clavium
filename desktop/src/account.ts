@@ -172,6 +172,9 @@ async function apiCall(session: AccountSession, method: string, path: string, bo
     let msg = data?.detail ?? `Request failed (HTTP ${response.status})`;
     if (response.status === 401) msg = "This computer was signed out. Sign in again.";
     if (response.status === 429) msg = "Too many attempts. Wait a minute and try again.";
+    if (response.status === 404 && !data?.detail) {
+      msg = "The Clavium server has not been updated for sync yet. Your vault is safe on this computer; sync starts once the server is updated.";
+    }
     throw new ApiError(response.status, msg, data);
   }
   return data;

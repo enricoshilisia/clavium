@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/app_state.dart';
 import '../core/native.dart';
+import 'link_screens.dart';
 import 'record_edit_screen.dart';
 import 'scan_screen.dart';
 import 'theme.dart';
@@ -15,8 +16,10 @@ class CodesTab extends StatelessWidget {
   final AppState app;
 
   Future<void> _scan(BuildContext context) async {
-    final uri = await Navigator.of(context).push<String>(MaterialPageRoute(builder: (_) => const ScanScreen()));
+    final uri = await Navigator.of(context).push<String>(MaterialPageRoute(
+        builder: (_) => ScanScreen(accept: (v) => v.startsWith('otpauth://') || v.startsWith('clavium://link'))));
     if (uri == null || !context.mounted) return;
+    if (uri.startsWith('clavium://link')) return scanAndApproveLink(context, app, scanned: uri);
     try {
       final p = Core.call('parse_otpauth', {'uri': uri}) as Map;
       final issuer = (p['issuer'] as String).isNotEmpty ? p['issuer'] as String : p['account'] as String;

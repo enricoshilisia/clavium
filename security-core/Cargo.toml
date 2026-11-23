@@ -35,6 +35,8 @@ sha1 = "0.10.6"
 # HKDF-SHA256 for deriving key-slot wrapping keys from high-entropy inputs
 # (a passkey's PRF output, a recovery key), where Argon2 adds nothing.
 hkdf = "0.12.4"
+# X25519 for QR device linking: the new device's one-time key pair.
+x25519-dalek = { version = "2.0.1", features = ["static_secrets"] }
 base64 = "0.22.1"
 # Host extraction for auto-categorisation; the same crate the desktop
 # bridge already trusts for URL matching.

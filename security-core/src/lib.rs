@@ -11,6 +11,7 @@ pub mod health;
 pub mod kdf;
 pub mod keypair;
 pub mod keyring;
+pub mod link;
 pub mod otp;
 pub mod record;
 pub mod sync;
@@ -27,6 +28,7 @@ pub use otp::{
 };
 pub use categorize::{auto_categorize, category_label, detect_card_brand, suggest_category, CATEGORIES};
 pub use keyring::{generate_recovery_key, KeySlot, Keyring, KeyringHeader, SlotKind};
+pub use link::{seal_for_link, verification_code, LinkEnvelope, LinkRequest};
 pub use record::{CategorySource, CustomField, Record, RecordKind};
 pub use sync::{EncryptedItem, MergeReport};
 pub use vault::Vault;

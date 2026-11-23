@@ -64,6 +64,9 @@ class ApiClient {
       String msg = decoded?['detail']?.toString() ?? 'Request failed (HTTP ${res.statusCode})';
       if (res.statusCode == 429) msg = 'Too many attempts. Wait a minute and try again.';
       if (res.statusCode == 401) msg = 'This device was signed out. Sign in again.';
+      if (res.statusCode == 404 && decoded?['detail'] == null) {
+        msg = 'The Clavium server has not been updated for sync yet. Your vault is safe on this device.';
+      }
       if (decoded != null && decoded['detail'] == null && res.statusCode == 400) {
         msg = decoded.values.expand((v) => v is List ? v : [v]).join(' ');
       }
@@ -123,6 +126,27 @@ class ApiClient {
   /// Aggregate counts only: never which items or passwords.
   Future<void> reportHealth(AccountSession s, Map<String, dynamic> counts) =>
       _send('POST', s.server, '/api/orgs/health/', token: s.token, body: counts);
+
+  // ---- QR device linking ----
+
+  Future<Map<String, dynamic>> linkStart(String server, Map<String, dynamic> body) async =>
+      await _send('POST', server, '/api/link/', body: body) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> linkPoll(String server, String id, String pollToken) async =>
+      await _send('GET', server, '/api/link/$id/?poll_token=${Uri.encodeQueryComponent(pollToken)}&wait=1',
+          timeout: const Duration(seconds: 40)) as Map<String, dynamic>;
+
+  Future<Map<String, dynamic>> linkInfo(AccountSession s, String id) async =>
+      await _send('GET', s.server, '/api/link/$id/info/', token: s.token) as Map<String, dynamic>;
+
+  Future<void> linkApprove(AccountSession s, String id, String publicKey, Map<String, dynamic> envelope) =>
+      _send('POST', s.server, '/api/link/$id/approve/', token: s.token, body: {'public_key': publicKey, 'envelope': envelope});
+
+  Future<void> linkDeny(AccountSession s, String id) => _send('POST', s.server, '/api/link/$id/deny/', token: s.token);
+
+  /// Fetch the keyring with a token the app has just been issued.
+  Future<Map<String, dynamic>?> getKeyringWithToken(String server, String token) =>
+      getKeyring(AccountSession(server: server, token: token, email: '', deviceId: ''));
 
   Future<void> resetSync(AccountSession s, String accountPassword) =>
       _send('POST', s.server, '/api/sync/reset/', token: s.token, body: {'password': accountPassword});

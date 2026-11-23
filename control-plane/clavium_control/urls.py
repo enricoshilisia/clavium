@@ -11,6 +11,7 @@ urlpatterns = [
     path("api/vaults/", include("vaults.urls")),
     path("api/sync/", include("sync.urls")),
     path("scim/v2/", include("scim.urls")),
+    path("api/link/", include("link.urls")),
     path("console/", include("console.urls")),
     path("api/orgs/", include("orgs.urls")),
     # Shared-vault endpoints nest under the same /api/orgs/<org_id>/ prefix

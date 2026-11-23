@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "sync",
     "scim",
     "console",
+    "link",
 ]
 
 MIDDLEWARE = [

@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/api_client.dart';
 import '../core/app_state.dart';
 import '../core/native.dart';
+import 'link_screens.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -34,10 +35,17 @@ class OnboardingScreen extends StatelessWidget {
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => CreateVaultScreen(app: app))),
           ),
           const SizedBox(height: 12),
+          FilledButton.tonalIcon(
+            key: const Key('link-qr-start'),
+            icon: const Icon(Icons.qr_code_2),
+            label: const Text('Sign in with QR code from my phone'),
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ShowLinkQrScreen(app: app))),
+          ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
             key: const Key('restore-vault'),
             icon: const Icon(Icons.cloud_download_outlined),
-            label: const Text('I already use Clavium'),
+            label: const Text('Sign in with email and password'),
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RestoreScreen(app: app))),
           ),
         ]),

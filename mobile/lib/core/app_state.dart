@@ -422,6 +422,108 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---------- QR device linking ----------
+
+  /// New device: start a link and return what the QR code shows. Call
+  /// [waitForLink] next.
+  Future<LinkStart> startLink(String server) async {
+    final qr = Core.call('link_begin') as Map;
+    final res = await api.linkStart(server, {
+      'public_key': qr['public_key'],
+      'client_device_id': await storage.clientDeviceId(),
+      'name': _deviceName,
+      'platform': _platform,
+    });
+    final uri = Uri(scheme: 'clavium', host: 'link', queryParameters: {
+      'v': '1',
+      'id': res['id'] as String,
+      'k': qr['public_key'] as String,
+      'x': qr['link_secret'] as String,
+      's': server,
+    }).toString();
+    return LinkStart(server: server, id: res['id'] as String, pollToken: res['poll_token'] as String, qr: uri, code: qr['code'] as String);
+  }
+
+  /// New device: wait for the phone to approve, then open the vault.
+  /// Returns false if the link expired or was declined.
+  Future<bool> waitForLink(LinkStart link, {bool Function()? cancelled}) async {
+    final deadline = DateTime.now().add(const Duration(minutes: 2, seconds: 10));
+    while (DateTime.now().isBefore(deadline)) {
+      if (cancelled?.call() ?? false) return false;
+      final r = await api.linkPoll(link.server, link.id, link.pollToken);
+      switch (r['status']) {
+        case 'approved':
+          final token = r['token'] as String;
+          final ring = await api.getKeyringWithToken(link.server, token);
+          if (ring == null) throw SyncException('Your account has no synced vault yet.');
+          final opened = Core.call('link_finish', {'envelope': r['envelope'], 'header': ring['header']});
+          final s = AccountSession(
+            server: link.server,
+            token: token,
+            email: (r['account'] as Map)['email'] as String,
+            deviceId: r['device_id'] as String,
+          );
+          session = s;
+          await storage.saveSession(s);
+          await storage.setPref('keyring_revision', ring['revision']);
+          await _persist(opened);
+          // Every record must decrypt with the linked key; a wrong key
+          // fails here, before anything is shown.
+          await sync.pull(s);
+          await _afterUnlock();
+          return true;
+        case 'pending':
+          continue;
+        default:
+          Core.call('link_cancel');
+          return false;
+      }
+    }
+    Core.call('link_cancel');
+    return false;
+  }
+
+  /// Approving phone: check a scanned QR and return what to show the
+  /// person before they approve.
+  Future<LinkInspection> inspectLink(String scanned) async {
+    final s = session;
+    if (s == null) throw CoreException('Sign in on this device first (Settings, Turn on sync).');
+    final uri = Uri.tryParse(scanned);
+    final q = uri?.queryParameters ?? const {};
+    if (uri == null || uri.scheme != 'clavium' || uri.host != 'link' || q['id'] == null || q['k'] == null || q['x'] == null) {
+      throw CoreException('That is not a Clavium sign-in QR code.');
+    }
+    if (q['s'] != null && q['s'] != s.server) {
+      throw CoreException('That device is signing in to a different Clavium server (${q['s']}).');
+    }
+    final info = await api.linkInfo(s, q['id']!);
+    if (info['public_key'] != q['k']) throw CoreException('This QR code does not match its sign-in request.');
+    final code = Core.call('link_code', {'public_key': q['k'], 'link_secret': q['x']}) as String;
+    return LinkInspection(
+      id: q['id']!,
+      publicKey: q['k']!,
+      linkSecret: q['x']!,
+      deviceName: info['name'] as String,
+      platform: info['platform'] as String? ?? '',
+      ip: info['requester_ip'] as String? ?? '',
+      code: code,
+    );
+  }
+
+  Future<void> approveLink(LinkInspection l) async {
+    final s = session!;
+    if (await biometrics.available() && !await biometrics.authenticate('Approve signing in ${l.deviceName}')) {
+      throw CoreException('Not approved.');
+    }
+    final env = Core.call('link_approve', {'public_key': l.publicKey, 'link_secret': l.linkSecret}) as Map;
+    await api.linkApprove(s, l.id, l.publicKey, Map<String, dynamic>.from(env));
+  }
+
+  Future<void> denyLink(LinkInspection l) async {
+    final s = session;
+    if (s != null) await api.linkDeny(s, l.id);
+  }
+
   // ---------- unlock methods ----------
 
   Future<String> _biometricCredentialId() async => 'device:${await storage.clientDeviceId()}';
@@ -495,4 +597,32 @@ class AppState extends ChangeNotifier {
     phase = Phase.onboarding;
     notifyListeners();
   }
+}
+
+class LinkStart {
+  LinkStart({required this.server, required this.id, required this.pollToken, required this.qr, required this.code});
+  final String server;
+  final String id;
+  final String pollToken;
+  final String qr;
+  final String code;
+}
+
+class LinkInspection {
+  LinkInspection({
+    required this.id,
+    required this.publicKey,
+    required this.linkSecret,
+    required this.deviceName,
+    required this.platform,
+    required this.ip,
+    required this.code,
+  });
+  final String id;
+  final String publicKey;
+  final String linkSecret;
+  final String deviceName;
+  final String platform;
+  final String ip;
+  final String code;
 }
