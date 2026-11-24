@@ -123,8 +123,21 @@ def org_dashboard(request, org_id):
         "scim_base": request.build_absolute_uri("/scim/v2/"),
         "new_secret": request.session.pop("console_secret", None),
         "ms": entra_console_context(request, org),
+        "team_vaults": _team_vaults(org),
     }
     return render(request, "console/org.html", ctx)
+
+
+def _team_vaults(org):
+    from teams.models import TeamVault
+
+    rows = (
+        TeamVault.objects.filter(organization=org)
+        .annotate(people=Count("accesses", distinct=True), waiting=Count("accesses", filter=Q(accesses__wrapped_key__isnull=True), distinct=True), item_count=Count("items", filter=Q(items__deleted=False), distinct=True))
+        .prefetch_related("group_rules")
+        .order_by("name")
+    )
+    return list(rows)
 
 
 def entra_console_context(request, org):

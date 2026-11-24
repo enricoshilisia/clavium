@@ -51,6 +51,25 @@
 
 {% include "entra/card.html" %}
 
+<div class="card">
+  <h2>Team vaults</h2>
+  <p class="sub">Shared vaults inside {{ org.name }}. Their contents are end-to-end encrypted: this console sees who has access, never what is inside. Managers add people and Microsoft 365 groups in the Clavium desktop app.</p>
+  <table>
+    <tr><th>Name</th><th>People</th><th>Items</th><th>Microsoft 365 groups</th><th>Key</th></tr>
+    {% for t in team_vaults %}
+    <tr>
+      <td>{{ t.name }}</td>
+      <td>{{ t.people }}{% if t.waiting %} <span class="pill gold">{{ t.waiting }} waiting</span>{% endif %}</td>
+      <td>{{ t.item_count }}</td>
+      <td>{% for r in t.group_rules.all %}{{ r.group_name }} ({{ r.get_role_display|lower }}){% if not forloop.last %}, {% endif %}{% empty %}<span class="faint">none</span>{% endfor %}</td>
+      <td>{% if t.needs_rotation %}<span class="pill gold">replacing after a removal</span>{% else %}<span class="faint">version {{ t.key_version }}</span>{% endif %}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="5" class="faint">No team vaults yet. Owners and admins create them in the Clavium desktop app.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
 <div class="grid2">
   <div class="card">
     <h2>Policy</h2>

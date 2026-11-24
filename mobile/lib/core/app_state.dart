@@ -10,6 +10,7 @@ import 'models.dart';
 import 'native.dart';
 import 'storage.dart';
 import 'sync_service.dart';
+import 'team_service.dart';
 
 enum Phase { loading, onboarding, locked, unlocked }
 
@@ -56,6 +57,62 @@ class AppState extends ChangeNotifier {
   DateTime? _backgroundedAt;
   bool _liveLoopRunning = false;
   Timer? _syncDebounce;
+
+  // ---------- team vaults ----------
+  late final TeamService teams = TeamService(api, storage, _persist);
+  List<TeamInfo> teamList = [];
+  String? activeTeamId;
+  String? teamError;
+  Timer? _teamTimer;
+  bool _teamSyncing = false;
+
+  TeamInfo? get activeTeam => activeTeamId == null ? null : teamList.where((t) => t.id == activeTeamId).firstOrNull;
+
+  /// True when what is on screen can be changed (personal vault, or a team
+  /// vault where this person is a manager or editor).
+  bool get canEdit => activeTeam == null || activeTeam!.canWrite;
+
+  void selectTeam(String? id) {
+    activeTeamId = id;
+    refresh();
+  }
+
+  Future<void> syncTeams() async {
+    final s = session;
+    if (s == null || phase != Phase.unlocked || _teamSyncing) return;
+    _teamSyncing = true;
+    try {
+      final list = await teams.list(s);
+      for (final t in list) {
+        if (t.hasKey) await teams.sync(s, t);
+      }
+      teamList = list;
+      if (activeTeamId != null && activeTeam == null) activeTeamId = null;
+      teamError = null;
+    } on ApiException catch (e) {
+      teamError = e.message;
+    } on CoreException catch (e) {
+      teamError = e.message;
+    } finally {
+      _teamSyncing = false;
+      if (phase == Phase.unlocked) refresh();
+    }
+  }
+
+  void _startTeamTimer() {
+    _teamTimer?.cancel();
+    if (!liveSync) return;
+    _teamTimer = Timer.periodic(const Duration(seconds: 20), (_) => unawaited(syncTeams()));
+  }
+
+  void _resetTeams() {
+    _teamTimer?.cancel();
+    _teamTimer = null;
+    teams.forget();
+    teamList = [];
+    activeTeamId = null;
+    teamError = null;
+  }
 
   // ---------- startup ----------
 
@@ -118,11 +175,13 @@ class AppState extends ChangeNotifier {
     if (session != null) {
       unawaited(syncNow());
       if (liveSync) unawaited(_liveLoop());
+      _startTeamTimer();
     }
   }
 
   void lock() {
     _syncDebounce?.cancel();
+    _resetTeams();
     _unlockPasswordLength = null;
     Core.call('lock');
     records = [];
@@ -202,6 +261,12 @@ class AppState extends ChangeNotifier {
 
   void refresh() {
     if (phase != Phase.unlocked) return;
+    final team = activeTeam;
+    if (team != null) {
+      records = team.hasKey ? teams.records(team.id, query: query) : [];
+      notifyListeners();
+      return;
+    }
     final list = Core.call('list', {
       'query': query,
       'category': categoryFilter,
@@ -241,6 +306,7 @@ class AppState extends ChangeNotifier {
       .toList();
 
   VaultRecord? get(String id) {
+    if (activeTeam != null) return teams.get(activeTeam!.id, id);
     try {
       return VaultRecord(Core.call('get', {'id': id}) as Map<String, dynamic>);
     } on CoreException {
@@ -249,6 +315,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<VaultRecord> addRecord(Map<String, dynamic> input) async {
+    if (activeTeam != null) {
+      final r = await teams.add(activeTeam!.id, input);
+      _teamChanged();
+      return r;
+    }
     final res = Core.call('add', {'record': input}) as Map;
     await _persist(res);
     _changed();
@@ -256,6 +327,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<VaultRecord> updateRecord(String id, Map<String, dynamic> input) async {
+    if (activeTeam != null) {
+      final r = await teams.update(activeTeam!.id, id, input);
+      _teamChanged();
+      return r;
+    }
     final res = Core.call('update', {'id': id, 'record': input}) as Map;
     await _persist(res);
     _changed();
@@ -268,6 +344,11 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> deleteRecord(String id) async {
+    if (activeTeam != null) {
+      await teams.delete(activeTeam!.id, id);
+      _teamChanged();
+      return;
+    }
     await _persist(Core.call('delete', {'id': id}));
     _changed();
   }
@@ -280,6 +361,12 @@ class AppState extends ChangeNotifier {
   Future<void> createFolder(String name) async {
     await _persist(Core.call('create_folder', {'name': name}));
     _changed();
+  }
+
+  void _teamChanged() {
+    refresh();
+    _syncDebounce?.cancel();
+    _syncDebounce = Timer(const Duration(seconds: 2), () => unawaited(syncTeams()));
   }
 
   void _changed() {
@@ -311,15 +398,17 @@ class AppState extends ChangeNotifier {
     if (phase == Phase.unlocked) {
       await syncNow();
       if (liveSync) unawaited(_liveLoop());
+      _startTeamTimer();
     }
   }
 
   Future<void> signOut() async {
     final s = session;
     session = null;
+    _resetTeams();
     await storage.saveSession(null);
     await storage.setPref('keyring_revision', null);
-    notifyListeners();
+    refresh();
     if (s != null) {
       try {
         await api.signOut(s);
@@ -381,6 +470,7 @@ class AppState extends ChangeNotifier {
       lastSync = DateTime.now();
       if (out.pulled > 0) refresh();
       await _afterSync(s);
+      await syncTeams();
     } on ApiException catch (e) {
       syncError = e.message;
       if (e.status == 401) {

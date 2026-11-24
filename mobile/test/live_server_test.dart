@@ -145,5 +145,79 @@ void main() {
 
     // A used QR cannot be approved again.
     await expectLater(phone.inspectLink(link.qr), throwsA(anything));
+    // Let the sync that unlocking started finish before the temp folders go.
+    await laptop.syncNow();
+    await phone.syncNow();
   }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('team vault: a manager shares with a colleague, edits flow both ways', () async {
+    final tmp = Directory.systemTemp.createTempSync('clavium_team');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final n = Random().nextInt(1 << 32);
+    final aliceEmail = 'team-a-$n@example.com', bobEmail = 'team-b-$n@example.com';
+    Map<String, String> auth(AppState x) => {'Authorization': 'Bearer ${x.session!.token}', 'Content-Type': 'application/json'};
+
+    // Bob signs up first, so he has a key pair to share with.
+    final bob = dev(Directory('${tmp.path}/b')..createSync());
+    await bob.init();
+    await bob.createVault(master);
+    await bob.register(server!, bobEmail, accountPw);
+    await bob.signIn(server, bobEmail, accountPw);
+    await bob.syncNow();
+    expect(bob.teamError, isNull, reason: bob.teamError);
+    final bobKey = await bob.api.call(bob.session!, 'GET', '/api/teams/key/') as Map;
+    bob.lock();
+
+    final alice = dev(Directory('${tmp.path}/a')..createSync());
+    await alice.init();
+    await alice.createVault(master);
+    await alice.register(server, aliceEmail, accountPw);
+    await alice.signIn(server, aliceEmail, accountPw);
+    final org = jsonDecode((await http.post(Uri.parse('$server/api/orgs/'), headers: auth(alice), body: jsonEncode({'name': 'Team E2E $n'}))).body) as Map;
+    final added = await http.post(Uri.parse('$server/api/orgs/${org['id']}/members/'), headers: auth(alice), body: jsonEncode({'email': bobEmail, 'role': 'member'}));
+    expect(added.statusCode, lessThan(300), reason: added.body);
+
+    final team = await alice.teams.create(alice.session!, org['id'] as String, 'Finance');
+    await alice.syncTeams();
+    expect(alice.teamList.map((t) => t.name), ['Finance']);
+    alice.selectTeam(team.id);
+    await alice.addRecord({'title': 'KCB corporate', 'username': 'finance', 'password': 'Kc8#corp', 'url': 'https://kcbgroup.com'});
+    expect(alice.records.single.category, 'banking');
+    final view = await alice.teams.members(alice.session!, team.id);
+    final bobRow = (view['candidates'] as List).firstWhere((c) => c['email'] == bobEmail) as Map;
+    expect(bobRow['public_key'], bobKey['public_key']);
+    await alice.teams.addMember(alice.session!, alice.activeTeam!, bobRow, 'editor');
+    await alice.syncTeams();
+    expect(alice.teamError, isNull, reason: alice.teamError);
+    // The server holds only ciphertext.
+    final rawItems = await alice.api.call(alice.session!, 'GET', '/api/teams/${team.id}/items/?since=0');
+    expect(jsonEncode(rawItems).contains('KCB'), isFalse);
+    alice.lock();
+
+    // Bob unlocks: the team vault opens with his own sealed copy.
+    await bob.unlock(master);
+    await bob.syncNow();
+    expect(bob.teamError, isNull, reason: bob.teamError);
+    final finance = bob.teamList.single;
+    expect((finance.name, finance.role, finance.hasKey), ('Finance', 'editor', true));
+    bob.selectTeam(finance.id);
+    expect(bob.records.single.title, 'KCB corporate');
+    await bob.updateRecord(bob.records.single.id, bob.records.single.toInput()..['password'] = 'changed-by-bob');
+    await bob.syncTeams();
+    bob.lock();
+
+    await alice.unlock(master);
+    await alice.syncNow();
+    alice.selectTeam(team.id);
+    expect(alice.records.single.password, 'changed-by-bob');
+
+    // Removing Bob makes Alice's app replace the key; Bob's old copy is useless.
+    final rm = await http.delete(Uri.parse('$server/api/teams/${team.id}/members/${(await bob.api.call(alice.session!, 'GET', '/api/teams/${team.id}/members/') as Map)['members'].firstWhere((m) => m['email'] == bobEmail)['account_id']}/'), headers: auth(alice));
+    expect(rm.statusCode, 204);
+    await alice.syncTeams();
+    final after = (await alice.api.call(alice.session!, 'GET', '/api/teams/') as Map)['teams'] as List;
+    expect((after.single['key_version'], after.single['needs_rotation']), (2, false));
+    expect(alice.records.single.password, 'changed-by-bob');
+    alice.lock();
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 3)));
 }

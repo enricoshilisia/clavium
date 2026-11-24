@@ -75,6 +75,10 @@ class ApiClient {
     return null;
   }
 
+  /// Any signed-in call (team vaults).
+  Future<dynamic> call(AccountSession s, String method, String path, {Object? body}) =>
+      _send(method, s.server, path, token: s.token, body: body);
+
   Future<void> register(String server, String email, String password) =>
       _send('POST', server, '/api/accounts/register/', body: {'email': email, 'password': password});
 

@@ -132,7 +132,7 @@ class AccountKeyView(APIView):
             if changed:
                 # Copies sealed to the old key can no longer be opened by
                 # this person; a manager's app seals new ones.
-                n = TeamAccess.objects.filter(account=request.user).exclude(wrapped_key=None).update(wrapped_key=None, sealed_to="")
+                n = TeamAccess.objects.filter(account=request.user, wrapped_key__isnull=False).update(wrapped_key=None, sealed_to="")
                 AuditLogEntry.record(organization=None, actor=request.user, action="team.account_key_set", obj=k, copies_reset=n)
         return Response({"public_key": k.public_key, "encrypted_private_key": k.encrypted_private_key})
 

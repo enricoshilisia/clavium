@@ -4,6 +4,7 @@ import '../core/app_state.dart';
 import '../core/models.dart';
 import 'record_detail_screen.dart';
 import 'record_edit_screen.dart';
+import 'team_sheet.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
@@ -16,103 +17,230 @@ class VaultTab extends StatelessWidget {
       context: context,
       showDragHandle: true,
       builder: (_) => SafeArea(
-        child: ListView(shrinkWrap: true, children: [
-          for (final e in kindLabels.entries.where((e) => e.key != 'passkey'))
-            ListTile(
-              leading: Icon(kindIcon(e.key)),
-              title: Text(e.value),
-              onTap: () => Navigator.pop(context, e.key),
-            ),
-        ]),
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final e in kindLabels.entries.where((e) => e.key != 'passkey'))
+              ListTile(
+                leading: Icon(kindIcon(e.key)),
+                title: Text(e.value),
+                onTap: () => Navigator.pop(context, e.key),
+              ),
+          ],
+        ),
       ),
     );
     if (kind != null && context.mounted) {
-      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => RecordEditScreen(app: app, kind: kind)));
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RecordEditScreen(app: app, kind: kind),
+        ),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final cats = app.categories.where((c) => c.count > 0).toList();
+    final team = app.activeTeam;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Vault'),
+        title: Text(team?.name ?? 'Vault'),
         actions: [
+          if (team != null)
+            IconButton(
+              tooltip: 'People',
+              icon: const Icon(Icons.group_outlined),
+              onPressed: () => showTeamSheet(context, app, team),
+            ),
           if (app.session != null)
             IconButton(
               tooltip: app.syncError ?? 'Sync now',
               onPressed: app.syncing ? null : app.syncNow,
               icon: app.syncing
-                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                  : Icon(app.syncError == null ? Icons.cloud_done_outlined : Icons.cloud_off, color: app.syncError == null ? null : ClvColors.danger),
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      app.syncError == null
+                          ? Icons.cloud_done_outlined
+                          : Icons.cloud_off,
+                      color: app.syncError == null ? null : ClvColors.danger,
+                    ),
             ),
-          IconButton(tooltip: 'Lock', icon: const Icon(Icons.lock_outline), onPressed: app.lock),
+          IconButton(
+            tooltip: 'Lock',
+            icon: const Icon(Icons.lock_outline),
+            onPressed: app.lock,
+          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        key: const Key('add-record'),
-        backgroundColor: ClvColors.gold500,
-        foregroundColor: ClvColors.navy950,
-        onPressed: () => _new(context),
-        child: const Icon(Icons.add),
-      ),
-      body: Column(children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: TextField(
-            key: const Key('search'),
-            decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search'),
-            onChanged: app.setQuery,
+      floatingActionButton: !app.canEdit || (team != null && !team.hasKey)
+          ? null
+          : FloatingActionButton(
+              key: const Key('add-record'),
+              backgroundColor: ClvColors.gold500,
+              foregroundColor: ClvColors.navy950,
+              onPressed: () => _new(context),
+              child: const Icon(Icons.add),
+            ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: TextField(
+              key: const Key('search'),
+              decoration: const InputDecoration(
+                prefixIcon: Icon(Icons.search),
+                hintText: 'Search',
+              ),
+              onChanged: app.setQuery,
+            ),
           ),
-        ),
-        SizedBox(
-          height: 44,
-          child: ListView(scrollDirection: Axis.horizontal, padding: const EdgeInsets.symmetric(horizontal: 12), children: [
-            _chip('All', null, app.categoryFilter == null && !app.favoritesOnly, () {
-              app.setFavoritesOnly(false);
-              app.setCategoryFilter(null);
-            }),
-            _chip('Favourites', Icons.star_outline, app.favoritesOnly, () => app.setFavoritesOnly(!app.favoritesOnly)),
-            for (final c in cats)
-              _chip('${c.label} · ${c.count}', categoryIcon(c.slug), app.categoryFilter == c.slug,
-                  () => app.setCategoryFilter(app.categoryFilter == c.slug ? null : c.slug)),
-          ]),
-        ),
-        for (final n in app.policyNotices)
-          MaterialBanner(
-            backgroundColor: ClvColors.navy800,
-            leading: const Icon(Icons.policy_outlined, color: ClvColors.gold500),
-            content: Text(n),
-            actions: const [SizedBox.shrink()],
-          ),
-        if (app.syncNotice != null)
-          MaterialBanner(content: Text(app.syncNotice!), actions: [TextButton(onPressed: () {}, child: const Text('OK'))]),
-        Expanded(
-          child: app.records.isEmpty
-              ? Center(
-                  child: Text(
-                    app.query.isEmpty && app.categoryFilter == null ? 'Nothing here yet. Tap + to add your first item.' : 'No matches.',
-                    style: const TextStyle(color: ClvColors.textDim),
+          if (app.teamList.isNotEmpty)
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(
+                      key: const Key('vault-personal'),
+                      label: const Text('My vault'),
+                      avatar: const Icon(Icons.person_outline, size: 16),
+                      selected: team == null,
+                      onSelected: (_) => app.selectTeam(null),
+                    ),
                   ),
-                )
-              : ListView.builder(
-                  itemCount: app.records.length,
-                  itemBuilder: (context, i) => _RecordRow(app: app, record: app.records[i]),
-                ),
-        ),
-      ]),
+                  for (final t in app.teamList)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: ChoiceChip(
+                        key: Key('team-${t.name}'),
+                        label: Text(t.name),
+                        avatar: const Icon(Icons.groups_outlined, size: 16),
+                        selected: team?.id == t.id,
+                        onSelected: (_) => app.selectTeam(t.id),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          if (team == null)
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                children: [
+                  _chip(
+                    'All',
+                    null,
+                    app.categoryFilter == null && !app.favoritesOnly,
+                    () {
+                      app.setFavoritesOnly(false);
+                      app.setCategoryFilter(null);
+                    },
+                  ),
+                  _chip(
+                    'Favourites',
+                    Icons.star_outline,
+                    app.favoritesOnly,
+                    () => app.setFavoritesOnly(!app.favoritesOnly),
+                  ),
+                  for (final c in cats)
+                    _chip(
+                      '${c.label} · ${c.count}',
+                      categoryIcon(c.slug),
+                      app.categoryFilter == c.slug,
+                      () => app.setCategoryFilter(
+                        app.categoryFilter == c.slug ? null : c.slug,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          for (final n in app.policyNotices)
+            MaterialBanner(
+              backgroundColor: ClvColors.navy800,
+              leading: const Icon(
+                Icons.policy_outlined,
+                color: ClvColors.gold500,
+              ),
+              content: Text(n),
+              actions: const [SizedBox.shrink()],
+            ),
+          if (team != null && team.role != null && !team.hasKey)
+            const MaterialBanner(
+              backgroundColor: ClvColors.navy800,
+              content: Text(
+                "You have been added. A manager's Clavium app gives you the key the next time it is open.",
+              ),
+              actions: [SizedBox.shrink()],
+            ),
+          if (team != null && team.role == null)
+            const MaterialBanner(
+              backgroundColor: ClvColors.navy800,
+              content: Text(
+                'You manage this team vault as an organization admin. Add yourself in the desktop app to see what is in it.',
+              ),
+              actions: [SizedBox.shrink()],
+            ),
+          if (team != null && team.role == 'viewer')
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Text(
+                'You can view this team vault.',
+                style: TextStyle(color: ClvColors.textDim, fontSize: 13),
+              ),
+            ),
+          if (app.syncNotice != null)
+            MaterialBanner(
+              content: Text(app.syncNotice!),
+              actions: [TextButton(onPressed: () {}, child: const Text('OK'))],
+            ),
+          Expanded(
+            child: app.records.isEmpty
+                ? Center(
+                    child: Text(
+                      app.query.isNotEmpty ||
+                              (team == null && app.categoryFilter != null)
+                          ? 'No matches.'
+                          : team == null
+                          ? 'Nothing here yet. Tap + to add your first item.'
+                          : (team.hasKey ? 'Nothing in ${team.name} yet.' : ''),
+                      style: const TextStyle(color: ClvColors.textDim),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: app.records.length,
+                    itemBuilder: (context, i) =>
+                        _RecordRow(app: app, record: app.records[i]),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _chip(String label, IconData? icon, bool selected, VoidCallback onTap) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: FilterChip(
-          label: Text(label),
-          avatar: icon == null ? null : Icon(icon, size: 16),
-          selected: selected,
-          onSelected: (_) => onTap(),
-        ),
-      );
+  Widget _chip(
+    String label,
+    IconData? icon,
+    bool selected,
+    VoidCallback onTap,
+  ) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    child: FilterChip(
+      label: Text(label),
+      avatar: icon == null ? null : Icon(icon, size: 16),
+      selected: selected,
+      onSelected: (_) => onTap(),
+    ),
+  );
 }
 
 class _RecordRow extends StatelessWidget {
@@ -127,11 +255,22 @@ class _RecordRow extends StatelessWidget {
         backgroundColor: ClvColors.navy700,
         child: Icon(kindIcon(record.kind), color: ClvColors.blue300, size: 20),
       ),
-      title: Row(children: [
-        Flexible(child: Text(record.title, overflow: TextOverflow.ellipsis)),
-        if (record.favorite) const Padding(padding: EdgeInsets.only(left: 6), child: Icon(Icons.star, size: 14, color: ClvColors.gold500)),
-      ]),
-      subtitle: Text(record.subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: ClvColors.textDim)),
+      title: Row(
+        children: [
+          Flexible(child: Text(record.title, overflow: TextOverflow.ellipsis)),
+          if (record.favorite)
+            const Padding(
+              padding: EdgeInsets.only(left: 6),
+              child: Icon(Icons.star, size: 14, color: ClvColors.gold500),
+            ),
+        ],
+      ),
+      subtitle: Text(
+        record.subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(color: ClvColors.textDim),
+      ),
       trailing: record.password.isNotEmpty
           ? IconButton(
               tooltip: 'Copy password',
@@ -139,7 +278,11 @@ class _RecordRow extends StatelessWidget {
               onPressed: () => copySecret(context, record.password, 'Password'),
             )
           : null,
-      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RecordDetailScreen(app: app, id: record.id))),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RecordDetailScreen(app: app, id: record.id),
+        ),
+      ),
     );
   }
 }

@@ -233,6 +233,16 @@ class TeamTests(TestCase):
         self.assertEqual(rules, [{"group_id": "g1", "group_name": "Finance", "role": "viewer"}])
         self.assertEqual(self.owner.delete(f"/api/teams/{tid}/groups/?group_id=g1").status_code, 204)
 
+    def test_console_lists_team_vaults_without_contents(self):
+        tid = self.create_team("Finance")
+        self.add(tid, self.bob_acct, with_key=False)
+        self.owner.post(f"/api/teams/{tid}/items/", {"key_version": 1, "items": [item()]}, format="json")
+        self.client.force_login(self.owner_acct)
+        page = self.client.get(f"/console/{self.org.id}/")
+        self.assertContains(page, "Team vaults")
+        self.assertContains(page, "Finance")
+        self.assertContains(page, "1 waiting")
+
     def test_rejects_malformed_keys(self):
         r = self.bob.put("/api/teams/key/", {"public_key": "short", "encrypted_private_key": b64(60)}, format="json")
         self.assertEqual(r.status_code, 400)
