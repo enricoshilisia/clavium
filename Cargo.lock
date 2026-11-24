@@ -676,6 +676,7 @@ name = "clavium-desktop"
 version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
+ "clavium-api",
  "clavium-security-core",
  "hex",
  "rand",
