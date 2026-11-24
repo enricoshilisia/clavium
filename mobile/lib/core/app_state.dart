@@ -377,6 +377,51 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  // ---------- share links and the phishing guard ----------
+
+  bool get shareAllowed => session != null && policy['allow_share_links'] != false;
+
+  /// Check a web address against known brands and this person's saved sites.
+  Map<String, dynamic> checkLink(String url) => Map<String, dynamic>.from(Core.call('check_link', {'url': url}) as Map);
+
+  /// Encrypt an item (or a note) and upload it; returns the link to send.
+  /// The key is only ever in the link's #fragment.
+  Future<({String url, String expiresAt})> createShare({
+    String? recordId,
+    String? text,
+    required String title,
+    String? passphrase,
+    bool includeTotp = false,
+    int hours = 24,
+    int views = 1,
+  }) async {
+    final s = session;
+    if (s == null) throw CoreException('Sign in first to send share links.');
+    final made = await Core.run('share_create', {
+      'id': ?recordId,
+      if (recordId != null && activeTeam != null) 'team_id': activeTeam!.id,
+      'text': ?text,
+      'title': title,
+      if (passphrase != null && passphrase.trim().isNotEmpty) 'passphrase': passphrase.trim(),
+      'include_totp': includeTotp,
+    }) as Map;
+    final draft = Map<String, dynamic>.from(made['draft'] as Map);
+    final key = draft.remove('link_key') as String;
+    final out = await api.call(s, 'POST', '/api/shares/', body: {...draft, 'rounds': made['rounds'], 'expires_in_hours': hours, 'max_views': views}) as Map;
+    final titles = Map<String, dynamic>.from((await storage.prefs())['share_titles'] as Map? ?? {});
+    titles[out['id'] as String] = title;
+    await storage.setPref('share_titles', titles);
+    return (url: '${out['url']}#$key', expiresAt: out['expires_at'] as String);
+  }
+
+  Future<List<Map<String, dynamic>>> listShares() async {
+    final rows = (await api.call(session!, 'GET', '/api/shares/') as List).cast<Map<String, dynamic>>();
+    final titles = Map<String, dynamic>.from((await storage.prefs())['share_titles'] as Map? ?? {});
+    return [for (final r in rows) {...r, 'title': titles[r['id']]}];
+  }
+
+  Future<void> revokeShare(String id) => api.call(session!, 'DELETE', '/api/shares/$id/');
+
   Map<String, dynamic> health() => Map<String, dynamic>.from(Core.call('health') as Map);
 
   // ---------- account ----------

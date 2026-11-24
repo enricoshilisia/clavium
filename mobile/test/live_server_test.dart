@@ -7,6 +7,7 @@ import 'dart:math';
 import 'package:clavium/core/api_client.dart';
 import 'package:clavium/core/app_state.dart';
 import 'package:clavium/core/blob_store_io.dart';
+import 'package:clavium/core/native.dart';
 import 'package:clavium/core/storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -220,4 +221,51 @@ void main() {
     expect(alice.records.single.password, 'changed-by-bob');
     alice.lock();
   }, skip: skip, timeout: const Timeout(Duration(minutes: 3)));
+
+  test('share link: encrypted on the phone, opened once with the passphrase', () async {
+    final tmp = Directory.systemTemp.createTempSync('clavium_share');
+    addTearDown(() => tmp.deleteSync(recursive: true));
+    final p = dev(Directory('${tmp.path}/p')..createSync());
+    await p.init();
+    await p.createVault(master);
+    final rec = await p.addRecord({'title': 'Office Wi-Fi', 'kind': 'wifi', 'password': 'Sh4red!wifi', 'fields': {'ssid': 'Contoso-5G'}});
+    final shareEmail = 'share-${Random().nextInt(1 << 32)}@example.com';
+    await p.register(server!, shareEmail, accountPw);
+    await p.signIn(server, shareEmail, accountPw);
+    await p.syncNow();
+    expect(p.shareAllowed, isTrue);
+
+    final link = await p.createShare(recordId: rec.id, title: rec.title, passphrase: 'blue horse', views: 1);
+    final uri = Uri.parse(link.url);
+    expect(uri.fragment.length, 43, reason: 'the key is only in the fragment');
+    final id = uri.pathSegments.last;
+    final meta = jsonDecode((await http.get(Uri.parse('$server/api/shares/$id/meta/'))).body) as Map;
+    expect((meta['has_passphrase'], meta['views_left']), (true, 1));
+
+    Future<http.Response> open(String passphrase) {
+      final a = Core.call('share_open', {'share_id': id, 'link_key': uri.fragment, 'passphrase': passphrase, 'salt': meta['salt'], 'rounds': meta['rounds']}) as Map;
+      return http.post(Uri.parse('$server/api/shares/$id/open/'), headers: {'Content-Type': 'application/json'}, body: jsonEncode({'auth': a['auth']}));
+    }
+
+    expect((await open('red horse')).statusCode, 403);
+    final ok = await open('blue horse');
+    expect(ok.statusCode, 200, reason: ok.body);
+    final body = jsonDecode(ok.body) as Map;
+    expect(body['ciphertext'].toString().contains('Sh4red'), isFalse);
+    final item = Core.call('share_open', {
+      'share_id': id, 'link_key': uri.fragment, 'passphrase': 'blue horse', 'salt': meta['salt'], 'rounds': meta['rounds'],
+      'nonce': body['nonce'], 'ciphertext': body['ciphertext'],
+    }) as Map;
+    expect((item['title'], item['password']), ('Office Wi-Fi', 'Sh4red!wifi'));
+    expect((item['fields'] as List).single, {'name': 'ssid', 'value': 'Contoso-5G'});
+    expect((await open('blue horse')).statusCode, 410, reason: 'used up');
+    final listed = await p.listShares();
+    expect((listed.first['title'], listed.first['status']), ('Office Wi-Fi', 'used'));
+
+    // Phishing guard through the app.
+    expect(p.checkLink('https://mpesa-reversal.co.ke/claim')['verdict'], 'dangerous');
+    expect(p.checkLink('https://www.safaricom.co.ke')['verdict'], 'trusted');
+    await p.syncNow();
+    p.lock();
+  }, skip: skip, timeout: const Timeout(Duration(minutes: 2)));
 }

@@ -535,6 +535,27 @@ impl Session {
                 Ok(json!({ "draft": draft, "rounds": rounds }))
             }
 
+            "share_open" => {
+                // Open a share link inside the app: returns `auth` to send to
+                // the server, or with `nonce` and `ciphertext` the item itself.
+                use clavium_security_core::share;
+                let id: Uuid = arg(a, "share_id")?;
+                let key: String = arg(a, "link_key")?;
+                let passphrase: Option<String> = opt_arg(a, "passphrase")?;
+                let salt: String = opt_arg(a, "salt")?.unwrap_or_default();
+                let rounds: u32 = opt_arg(a, "rounds")?.unwrap_or(share::PBKDF2_ROUNDS);
+                let nonce: Option<String> = opt_arg(a, "nonce")?;
+                let ciphertext: Option<String> = opt_arg(a, "ciphertext")?;
+                match (nonce, ciphertext) {
+                    (Some(n), Some(c)) => {
+                        let plain = share::open_with_rounds(id, &key, passphrase.as_deref(), &salt, &n, &c, rounds)
+                            .map_err(|_| "this link or passphrase does not open it".to_string())?;
+                        Ok(serde_json::from_slice::<Value>(&plain).map_err(|e| e.to_string())?)
+                    }
+                    _ => Ok(json!({ "auth": share::auth_for(&key, passphrase.as_deref(), &salt, rounds).map_err(|e| e.to_string())? })),
+                }
+            }
+
             // ---- sync ----
             "sync_state" => {
                 let v = self.vault()?;

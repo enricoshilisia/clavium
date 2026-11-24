@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/app_state.dart';
 import '../core/models.dart';
 import 'record_edit_screen.dart';
+import 'share_screens.dart';
 import 'theme.dart';
 import 'totp_view.dart';
 import 'widgets.dart';
@@ -93,6 +94,10 @@ class RecordDetailScreen extends StatelessWidget {
               if (app.canEdit)
                 PopupMenuButton<String>(
                   onSelected: (v) async {
+                    if (v == 'share') {
+                      await showShareSheet(context, app, r);
+                      return;
+                    }
                     if (v != 'delete') return;
                     final ok = await showDialog<bool>(
                       context: context,
@@ -120,8 +125,13 @@ class RecordDetailScreen extends StatelessWidget {
                       if (context.mounted) Navigator.of(context).pop();
                     }
                   },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                  itemBuilder: (_) => [
+                    if (app.shareAllowed)
+                      const PopupMenuItem(
+                        value: 'share',
+                        child: Text('Share link'),
+                      ),
+                    const PopupMenuItem(value: 'delete', child: Text('Delete')),
                   ],
                 ),
             ],
@@ -168,6 +178,20 @@ class RecordDetailScreen extends StatelessWidget {
                   ),
                 ),
               if (r.url.isNotEmpty) FieldTile(label: 'Website', value: r.url),
+              if (r.url.isNotEmpty)
+                Builder(
+                  builder: (_) {
+                    final c = app.checkLink(r.url);
+                    if (c['verdict'] != 'dangerous' &&
+                        c['verdict'] != 'suspicious') {
+                      return const SizedBox.shrink();
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: VerdictCard(check: c),
+                    );
+                  },
+                ),
               for (final e in r.fields.entries)
                 FieldTile(
                   label: fieldLabel(e.key),
