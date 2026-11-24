@@ -206,6 +206,33 @@ class TeamTests(TestCase):
         apply_group_rules(self.org)
         self.assertTrue(TeamAccess.objects.filter(team=team, account=self.cat_acct).exists())
 
+    def test_group_search_and_rules_need_microsoft_365(self):
+        from unittest import mock
+
+        from entra import graph
+        from entra.models import DirectoryConnection
+
+        tid = self.create_team()
+        self.assertEqual(self.owner.get(f"/api/teams/{tid}/groups/?q=fin").json(), {"connected": False, "groups": []})
+        self.assertEqual(self.owner.post(f"/api/teams/{tid}/groups/", {"group_id": "g1"}, format="json").status_code, 409)
+        DirectoryConnection.objects.create(organization=self.org, tenant_id="t-1")
+
+        class Fake:
+            def search_groups(self, q, limit=25):
+                return [{"id": "g1", "name": "Finance"}]
+
+            def group(self, gid):
+                return {"id": gid, "name": "Finance"}
+
+        with mock.patch.object(graph, "client_for", return_value=Fake()):
+            self.assertEqual(self.owner.get(f"/api/teams/{tid}/groups/?q=fin").json()["groups"], [{"id": "g1", "name": "Finance"}])
+            r = self.owner.post(f"/api/teams/{tid}/groups/", {"group_id": "g1", "role": "viewer"}, format="json")
+            self.assertEqual(r.status_code, 201)
+            self.assertEqual(self.bob.get(f"/api/teams/{tid}/groups/?q=fin").status_code, 403)
+        rules = self.owner.get(f"/api/teams/{tid}/members/").json()["group_rules"]
+        self.assertEqual(rules, [{"group_id": "g1", "group_name": "Finance", "role": "viewer"}])
+        self.assertEqual(self.owner.delete(f"/api/teams/{tid}/groups/?group_id=g1").status_code, 204)
+
     def test_rejects_malformed_keys(self):
         r = self.bob.put("/api/teams/key/", {"public_key": "short", "encrypted_private_key": b64(60)}, format="json")
         self.assertEqual(r.status_code, 400)

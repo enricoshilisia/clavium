@@ -637,3 +637,21 @@
   letter-spacing: 0.04em;
   word-break: break-all;
 }
+
+/* ---- team vaults ---- */
+.nav-item-add { color: var(--clv-text-dim, #9fb0c9); font-size: 13px; }
+.nav-error { font-size: 11px; padding: 4px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 2px 4px; }
+.team-header-name { font-weight: 600; }
+.team-header-sub { font-size: 12px; }
+.pill-team { background: rgba(201, 162, 39, 0.18); color: #e3c766; }
+.team-card { max-width: 560px; }
+.team-members { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 10px; }
+.team-member { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(154, 182, 224, 0.12); }
+.team-member-who { flex: 1; min-width: 0; }
+.team-member-sub { font-size: 12px; overflow-wrap: anywhere; }
+.team-member code { font-size: 11px; }
+.team-role { width: auto; min-width: 110px; }
+.team-add { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.team-add .clv-input:first-child { flex: 1; min-width: 0; }
+.team-help { font-size: 12px; margin: 2px 0 6px; }

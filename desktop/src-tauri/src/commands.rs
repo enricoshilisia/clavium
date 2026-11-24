@@ -34,6 +34,10 @@ fn locked_session<'a>(
         .map_err(|_| "internal error: vault session lock was poisoned".to_string())
 }
 
+pub(crate) fn reseal_session(session: &VaultSession) -> CmdResult<()> {
+    reseal(session)
+}
+
 fn reseal(session: &VaultSession) -> CmdResult<()> {
     let sealed = session.vault.save().map_err(|e| e.to_string())?;
     // Write to a temp file then rename, so a crash mid-write never leaves
@@ -83,6 +87,9 @@ pub fn vault_create(
     };
     let mut guard = locked_session(&state)?;
     *guard = Some(VaultSession { vault, path });
+    if let Ok(mut teams) = state.teams.lock() {
+        teams.lock();
+    }
     Ok(summary)
 }
 
@@ -104,6 +111,9 @@ pub fn vault_unlock(
 
     let mut guard = locked_session(&state)?;
     *guard = Some(VaultSession { vault, path });
+    if let Ok(mut teams) = state.teams.lock() {
+        teams.lock();
+    }
     if was_v1 {
         reseal(guard.as_ref().unwrap())?;
     }
@@ -117,6 +127,9 @@ pub fn vault_unlock(
 pub fn vault_lock(state: State<AppState>) -> CmdResult<()> {
     let mut guard = locked_session(&state)?;
     *guard = None;
+    if let Ok(mut teams) = state.teams.lock() {
+        teams.lock();
+    }
     Ok(())
 }
 
@@ -523,6 +536,9 @@ pub fn vault_restore_from_keyring(
     let session = VaultSession { vault: Vault::from_keyring(ring), path };
     reseal(&session)?;
     *locked_session(&state)? = Some(session);
+    if let Ok(mut teams) = state.teams.lock() {
+        teams.lock();
+    }
     Ok(())
 }
 

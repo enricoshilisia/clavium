@@ -12,12 +12,15 @@ const STORAGE_KEYS = {
   clientDeviceId: "clavium.account.clientDeviceId",
   email: "clavium.account.email",
   server: "clavium.account.server",
+  accountId: "clavium.account.id",
 };
 
 export interface AccountSession {
   token: string;
   email: string;
   serverDeviceId: string;
+  /** Missing for sessions saved before team vaults; see ensureAccountId. */
+  accountId?: string;
 }
 
 export interface SnapshotMeta {
@@ -48,7 +51,7 @@ export function loadSession(): AccountSession | null {
   // (Sessions saved before this was recorded belong to the default.)
   const server = localStorage.getItem(STORAGE_KEYS.server);
   if (server && server !== controlPlaneUrl()) return null;
-  return { token, email, serverDeviceId };
+  return { token, email, serverDeviceId, accountId: localStorage.getItem(STORAGE_KEYS.accountId) ?? undefined };
 }
 
 function saveSession(session: AccountSession) {
@@ -56,6 +59,7 @@ function saveSession(session: AccountSession) {
   localStorage.setItem(STORAGE_KEYS.email, session.email);
   localStorage.setItem(STORAGE_KEYS.serverDeviceId, session.serverDeviceId);
   localStorage.setItem(STORAGE_KEYS.server, controlPlaneUrl());
+  if (session.accountId) localStorage.setItem(STORAGE_KEYS.accountId, session.accountId);
 }
 
 function clearSession() {
@@ -63,6 +67,7 @@ function clearSession() {
   localStorage.removeItem(STORAGE_KEYS.email);
   localStorage.removeItem(STORAGE_KEYS.serverDeviceId);
   localStorage.removeItem(STORAGE_KEYS.server);
+  localStorage.removeItem(STORAGE_KEYS.accountId);
   // clientDeviceId is kept deliberately — it identifies this install, and
   // re-logging in should reuse (and rotate the token on) the same device
   // row rather than silently accumulating a new one every time.
@@ -117,6 +122,7 @@ export async function login(email: string, password: string): Promise<AccountSes
     token: data.token,
     email: data.account.email,
     serverDeviceId: data.device_id,
+    accountId: data.account.id,
   };
   saveSession(session);
   return session;
@@ -190,6 +196,20 @@ async function apiCall(session: AccountSession, method: string, path: string, bo
     throw new ApiError(response.status, msg, data);
   }
   return data;
+}
+
+/** Any authenticated call; used by the team vault client. */
+export function api(session: AccountSession, method: string, path: string, body?: unknown) {
+  return apiCall(session, method, path, body);
+}
+
+/** Older sessions did not store the account id; fetch it once. */
+export async function ensureAccountId(session: AccountSession): Promise<string> {
+  if (session.accountId) return session.accountId;
+  const me = await apiCall(session, "GET", "/api/accounts/me/");
+  session.accountId = me.id as string;
+  localStorage.setItem(STORAGE_KEYS.accountId, session.accountId);
+  return session.accountId;
 }
 
 export async function getKeyring(session: AccountSession): Promise<KeyringResponse | null> {

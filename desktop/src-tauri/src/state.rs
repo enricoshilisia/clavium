@@ -47,4 +47,6 @@ pub struct AppState {
     pub session: Mutex<Option<VaultSession>>,
     pub pairing: Mutex<Option<PendingPairing>>,
     pub paired: Mutex<Vec<PairedExtension>>,
+    /// Account key and open team vaults, cleared on lock.
+    pub teams: Mutex<clavium_api::teams::Teams>,
 }

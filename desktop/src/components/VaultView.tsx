@@ -23,6 +23,8 @@ import { managed } from "../managed";
 import BrowserPanel from "./BrowserPanel";
 import RecordForm from "./RecordForm";
 import SecurityPanel from "./SecurityPanel";
+import TeamPanel, { NewTeamPanel } from "./TeamPanel";
+import { listTeams, ROLE_LABELS, syncTeam, teamAdd, teamDelete, teamRecords, teamUpdate, type OrgInfo, type TeamInfo } from "../teams";
 
 interface Props {
   records: VaultRecord[];
@@ -32,7 +34,12 @@ interface Props {
 }
 
 type Mode = "view" | "edit" | "add";
-type Filter = { type: "all" } | { type: "favorites" } | { type: "category"; slug: string } | { type: "folder"; name: string };
+type Filter =
+  | { type: "all" }
+  | { type: "favorites" }
+  | { type: "category"; slug: string }
+  | { type: "folder"; name: string }
+  | { type: "team"; id: string };
 
 export default function VaultView({ records, onRecordsChange, onLock, autoLockMinutes }: Props) {
   const [search, setSearch] = useState("");
@@ -44,6 +51,14 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   const [panel, setPanel] = useState<"account" | "browser" | "security" | null>(null);
   const [kinds, setKinds] = useState<KindInfo[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
+
+  // ---- team vaults ----
+  const [teams, setTeams] = useState<TeamInfo[]>([]);
+  const [orgs, setOrgs] = useState<OrgInfo[]>([]);
+  const [teamRecs, setTeamRecs] = useState<Record<string, VaultRecord[]>>({});
+  const [teamPanel, setTeamPanel] = useState<TeamInfo | null>(null);
+  const [newTeam, setNewTeam] = useState(false);
+  const [teamError, setTeamError] = useState<string | null>(null);
 
   // ---- sync ----
   const [session, setSession] = useState<AccountSession | null>(() => loadSession());
@@ -64,6 +79,36 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
 
   const reload = useCallback(async () => onRecordsChange(await vaultListRecords()), [onRecordsChange]);
 
+  const reloadTeam = useCallback(async (id: string) => {
+    const recs = await teamRecords(id);
+    setTeamRecs((prev) => ({ ...prev, [id]: recs }));
+  }, []);
+
+  const teamSyncing = useRef(false);
+  const syncTeams = useCallback(async () => {
+    const s = loadSession();
+    if (!s || teamSyncing.current) return;
+    teamSyncing.current = true;
+    try {
+      const out = await listTeams(s);
+      for (const t of out.teams) {
+        if (t.wrapped_key) {
+          await syncTeam(s, t);
+          await reloadTeam(t.id);
+        }
+      }
+      if (alive.current) {
+        setTeams(out.teams);
+        setOrgs(out.organizations);
+        setTeamError(null);
+      }
+    } catch (e) {
+      if (alive.current) setTeamError(e instanceof Error ? e.message : String(e));
+    } finally {
+      teamSyncing.current = false;
+    }
+  }, [reloadTeam]);
+
   const runSync = useCallback(async () => {
     const s = loadSession();
     if (!s) return;
@@ -82,6 +127,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           setLastSync(new Date());
           if (out.changed > 0) await reload();
           setPolicy(await afterSync(s, await vaultHasRecoveryKey().catch(() => false)));
+          await syncTeams();
         } catch (e) {
           setSyncError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -95,7 +141,14 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
     } finally {
       inFlight.current = null;
     }
-  }, [reload]);
+  }, [reload, syncTeams]);
+
+  // Team vaults have no long-poll of their own yet: check every 20 s.
+  useEffect(() => {
+    if (!session) return;
+    const t = window.setInterval(() => syncTeams(), 20_000);
+    return () => window.clearInterval(t);
+  }, [session, syncTeams]);
 
   useEffect(() => {
     alive.current = true;
@@ -147,9 +200,13 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
 
   const folders = useMemo(() => [...new Set(records.map((r) => r.folder).filter((f): f is string => !!f))].sort(), [records]);
 
+  const activeTeam = filter.type === "team" ? teams.find((t) => t.id === filter.id) ?? null : null;
+  const source = activeTeam ? teamRecs[activeTeam.id] ?? [] : records;
+  const canWrite = !activeTeam || activeTeam.role === "manager" || activeTeam.role === "editor";
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return [...records]
+    return [...source]
       .filter((r) => {
         if (filter.type === "favorites" && !r.favorite) return false;
         if (filter.type === "category" && (r.category ?? "uncategorized") !== filter.slug) return false;
@@ -164,9 +221,9 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
         );
       })
       .sort((a, b) => Number(b.favorite) - Number(a.favorite) || a.title.localeCompare(b.title));
-  }, [records, search, filter]);
+  }, [source, search, filter]);
 
-  const selected = records.find((r) => r.id === selectedId) ?? null;
+  const selected = source.find((r) => r.id === selectedId) ?? null;
   const catLabel = (slug: string | null) => categories.find((c) => c.slug === slug)?.label ?? "Uncategorised";
 
   // ---- mutations ----
@@ -175,7 +232,12 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
     setError(null);
     try {
       await fn();
-      changed();
+      if (activeTeam) {
+        await reloadTeam(activeTeam.id);
+        syncTeams();
+      } else {
+        changed();
+      }
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -185,8 +247,8 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
 
   const saveNew = (input: RecordInput) =>
     guarded(async () => {
-      const created = await vaultAddRecord(input);
-      await reload();
+      const created = activeTeam ? (await teamAdd(activeTeam.id, input)).record : await vaultAddRecord(input);
+      if (!activeTeam) await reload();
       setSelectedId(created.id);
       setMode("view");
     });
@@ -194,17 +256,24 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   const saveEdit = (input: RecordInput) =>
     guarded(async () => {
       if (!selected) return;
-      await vaultUpdateRecord(selected.id, input);
-      await reload();
+      if (activeTeam) await teamUpdate(activeTeam.id, selected.id, input);
+      else {
+        await vaultUpdateRecord(selected.id, input);
+        await reload();
+      }
       setMode("view");
     });
 
   async function deleteSelected() {
     if (!selected) return;
-    if (!window.confirm(`Delete "${selected.title}"? It is removed from every device this vault syncs to.`)) return;
+    const where = activeTeam ? `everyone in ${activeTeam.name}` : "every device this vault syncs to";
+    if (!window.confirm(`Delete "${selected.title}"? It is removed for ${where}.`)) return;
     await guarded(async () => {
-      await vaultDeleteRecord(selected.id);
-      await reload();
+      if (activeTeam) await teamDelete(activeTeam.id, selected.id);
+      else {
+        await vaultDeleteRecord(selected.id);
+        await reload();
+      }
       setSelectedId(null);
     });
   }
@@ -258,6 +327,28 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           .map((c) => navItem(c.label, { type: "category", slug: c.slug }, counts.get(c.slug)))}
         {folders.length > 0 && <div className="nav-heading">Folders</div>}
         {folders.map((f) => navItem(f, { type: "folder", name: f }, records.filter((r) => r.folder === f).length))}
+        {(teams.length > 0 || orgs.some((o) => o.can_create)) && <div className="nav-heading">Team vaults</div>}
+        {teams.map((t) => (
+          <button
+            key={t.id}
+            className={`nav-item ${filter.type === "team" && filter.id === t.id ? "nav-item-active" : ""}`}
+            onClick={() => {
+              setFilter({ type: "team", id: t.id });
+              setSelectedId(null);
+              setMode("view");
+            }}
+            title={t.organization.name}
+          >
+            <span>{t.name}</span>
+            <span className="nav-count">{t.wrapped_key ? teamRecs[t.id]?.length ?? "" : t.role ? "…" : ""}</span>
+          </button>
+        ))}
+        {orgs.some((o) => o.can_create) && (
+          <button className="nav-item nav-item-add" onClick={() => setNewTeam(true)}>
+            + New team vault
+          </button>
+        )}
+        {teamError && <div className="faint nav-error" title={teamError}>Team vaults: {teamError}</div>}
 
         <div className="nav-spacer" />
         <div className="sync-status" title={syncError ?? undefined}>
@@ -304,6 +395,29 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
         />
       )}
       {panel === "browser" && <BrowserPanel onClose={() => setPanel(null)} />}
+      {newTeam && session && (
+        <NewTeamPanel
+          session={session}
+          orgs={orgs}
+          onClose={() => setNewTeam(false)}
+          onCreated={async (t) => {
+            setNewTeam(false);
+            await syncTeams();
+            setFilter({ type: "team", id: t.id });
+          }}
+        />
+      )}
+      {teamPanel && session && (
+        <TeamPanel
+          session={session}
+          team={teamPanel}
+          onClose={() => setTeamPanel(null)}
+          onChanged={(gone) => {
+            if (gone) setFilter({ type: "all" });
+            syncTeams();
+          }}
+        />
+      )}
       {panel === "security" && (
         <SecurityPanel
           records={records}
@@ -322,17 +436,39 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
       )}
 
       <aside className="vault-sidebar">
+        {activeTeam && (
+          <div className="team-header">
+            <div>
+              <div className="team-header-name">{activeTeam.name}</div>
+              <div className="faint team-header-sub">
+                {activeTeam.organization.name}
+                {activeTeam.role ? ` · ${ROLE_LABELS[activeTeam.role]}` : " · admin"}
+              </div>
+            </div>
+            <button className="clv-btn clv-btn-ghost clv-btn-sm" onClick={() => setTeamPanel(activeTeam)}>
+              {activeTeam.can_manage ? "Manage" : "People"}
+            </button>
+          </div>
+        )}
         <input className="clv-input" placeholder="Search…" value={search} onChange={(e) => setSearch(e.currentTarget.value)} />
-        <button
-          className="clv-btn clv-btn-gold vault-add-btn"
-          onClick={() => {
-            setSelectedId(null);
-            setMode("add");
-            setError(null);
-          }}
-        >
-          + New item
-        </button>
+        {canWrite && (!activeTeam || !!activeTeam.wrapped_key) && (
+          <button
+            className="clv-btn clv-btn-gold vault-add-btn"
+            onClick={() => {
+              setSelectedId(null);
+              setMode("add");
+              setError(null);
+            }}
+          >
+            + New item{activeTeam ? ` in ${activeTeam.name}` : ""}
+          </button>
+        )}
+        {activeTeam && !!activeTeam.role && !activeTeam.wrapped_key && (
+          <div className="clv-notice">You have been added. A manager's Clavium app gives you the key the next time it is open; this usually takes a moment.</div>
+        )}
+        {activeTeam && !activeTeam.role && (
+          <div className="clv-notice">You manage this team vault as an organization admin. Add yourself under Manage to see what is in it.</div>
+        )}
         {syncNotice && <div className="clv-notice">{syncNotice}</div>}
         {managed().require_sign_in && !session && (
           <div className="clv-notice">
@@ -410,21 +546,29 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
             <div className="detail-header">
               <h2>
                 {selected.title || "(untitled)"}{" "}
-                <button className="fav-toggle" onClick={() => toggleFavorite(selected)} title="Favourite">
-                  {selected.favorite ? "★" : "☆"}
-                </button>
+                {!activeTeam && (
+                  <button className="fav-toggle" onClick={() => toggleFavorite(selected)} title="Favourite">
+                    {selected.favorite ? "★" : "☆"}
+                  </button>
+                )}
               </h2>
-              <div className="detail-header-actions">
-                <button className="clv-btn" onClick={() => setMode("edit")}>
-                  Edit
-                </button>
-                <button className="clv-btn clv-btn-danger" onClick={deleteSelected}>
-                  Delete
-                </button>
-              </div>
+              {canWrite && (
+                <div className="detail-header-actions">
+                  <button className="clv-btn" onClick={() => setMode("edit")}>
+                    Edit
+                  </button>
+                  <button className="clv-btn clv-btn-danger" onClick={deleteSelected}>
+                    Delete
+                  </button>
+                </div>
+              )}
             </div>
             <div className="detail-meta-row">
               <span className="pill">{KIND_LABELS[selected.kind]}</span>
+              {activeTeam && <span className="pill pill-team">{activeTeam.name}</span>}
+              {activeTeam ? (
+                <span className="pill">{catLabel(selected.category)}</span>
+              ) : (
               <select className="clv-input pill-select" value={selected.category ?? ""} onChange={(e) => recategorize(selected, e.currentTarget.value)}>
                 <option value="">{selected.category_source === "auto" ? `${catLabel(selected.category)} (auto)` : "Automatic"}</option>
                 {categories.map((c) => (
@@ -433,6 +577,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
                   </option>
                 ))}
               </select>
+              )}
               {selected.folder && <span className="pill">{selected.folder}</span>}
               {selected.tags.map((t) => (
                 <span key={t} className="pill pill-tag">

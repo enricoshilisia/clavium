@@ -22,7 +22,9 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
-type R = Result<Value, String>;
+pub mod teams;
+
+pub(crate) type R = Result<Value, String>;
 
 #[derive(Default)]
 pub struct Session {
@@ -31,6 +33,7 @@ pub struct Session {
     link: Option<clavium_security_core::LinkRequest>,
     /// Weak KDF parameters for automated tests only.
     fast_kdf: bool,
+    teams: teams::Teams,
 }
 
 #[derive(Deserialize)]
@@ -41,7 +44,7 @@ struct Request {
 }
 
 #[derive(Deserialize, Default)]
-struct RecordInput {
+pub(crate) struct RecordInput {
     #[serde(default)]
     kind: RecordKind,
     #[serde(default)]
@@ -72,7 +75,7 @@ struct RecordInput {
 }
 
 impl RecordInput {
-    fn apply(self, r: &mut Record) -> Result<(), String> {
+    pub(crate) fn apply(self, r: &mut Record) -> Result<(), String> {
         let totp = match self.totp_secret.filter(|s| !s.trim().is_empty()) {
             Some(s) => {
                 parse_secret_or_uri(&s)
@@ -118,12 +121,12 @@ impl RecordInput {
     }
 }
 
-fn arg<T: for<'de> Deserialize<'de>>(args: &Value, name: &str) -> Result<T, String> {
+pub(crate) fn arg<T: for<'de> Deserialize<'de>>(args: &Value, name: &str) -> Result<T, String> {
     serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null))
         .map_err(|e| format!("argument `{name}`: {e}"))
 }
 
-fn opt_arg<T: for<'de> Deserialize<'de>>(args: &Value, name: &str) -> Result<Option<T>, String> {
+pub(crate) fn opt_arg<T: for<'de> Deserialize<'de>>(args: &Value, name: &str) -> Result<Option<T>, String> {
     match args.get(name) {
         None | Some(Value::Null) => Ok(None),
         Some(v) => serde_json::from_value(v.clone())
@@ -153,7 +156,7 @@ impl Session {
 
     /// For tests: Argon2 parameters cheap enough to run hundreds of times.
     pub fn with_fast_kdf() -> Self {
-        Self { vault: None, link: None, fast_kdf: true }
+        Self { fast_kdf: true, ..Self::default() }
     }
 
     fn kdf(&self) -> KdfParams {
@@ -198,6 +201,15 @@ impl Session {
     }
 
     fn dispatch(&mut self, cmd: &str, a: &Value) -> R {
+        if cmd.starts_with("team_") {
+            let (mut out, personal_changed) = self.teams.dispatch(cmd, a, self.vault.as_mut())?;
+            if personal_changed {
+                if let Value::Object(map) = &mut out {
+                    map.insert("saved".into(), json!(self.saved()?));
+                }
+            }
+            return Ok(out);
+        }
         match cmd {
             "version" => Ok(json!({ "api": 1, "core": env!("CARGO_PKG_VERSION") })),
 
@@ -244,6 +256,7 @@ impl Session {
             }
             "lock" => {
                 self.vault = None;
+                self.teams.lock();
                 Ok(Value::Null)
             }
             "is_unlocked" => Ok(json!(self.vault.is_some())),
@@ -651,6 +664,11 @@ mod link_tests {
         out["ok"].clone()
     }
 
+    fn call_err(s: &mut Session, cmd: &str, args: Value) -> String {
+        let out: Value = serde_json::from_str(&s.handle(&json!({ "cmd": cmd, "args": args }).to_string())).unwrap();
+        out["error"].as_str().expect("expected an error").to_string()
+    }
+
     #[test]
     fn a_phone_links_a_new_device_by_qr() {
         let mut phone = Session::with_fast_kdf();
@@ -691,5 +709,76 @@ mod link_tests {
         let env = call(&mut phone, "link_approve", json!({ "public_key": qr["public_key"], "link_secret": qr["link_secret"] }));
         let out: Value = serde_json::from_str(&laptop.handle(&json!({ "cmd": "link_finish", "args": { "envelope": env, "header": other_header } }).to_string())).unwrap();
         assert!(out["error"].as_str().unwrap().contains("does not match"));
+    }
+
+    fn person() -> Session {
+        let mut s = Session::with_fast_kdf();
+        call(&mut s, "create", json!({ "master_password": "a long master password" }));
+        s
+    }
+
+    #[test]
+    fn team_vault_between_two_people() {
+        let (mut alice, mut bob) = (person(), person());
+        let ka = call(&mut alice, "team_account_key", json!({ "account_id": "alice", "stored": null }));
+        assert_eq!(ka["status"], "created");
+        // A second device of Alice's (same personal vault) loads the same key.
+        let again = call(&mut alice, "team_account_key", json!({ "account_id": "alice", "stored": ka["stored"] }));
+        assert_eq!((again["status"].as_str(), &again["public_key"]), (Some("loaded"), &ka["public_key"]));
+        let kb = call(&mut bob, "team_account_key", json!({ "account_id": "bob", "stored": null }));
+
+        let team = call(&mut alice, "team_create", json!({}));
+        let tid = team["team_id"].clone();
+        let added = call(&mut alice, "team_add", json!({ "team_id": tid, "record": { "title": "KCB corporate", "username": "finance", "url": "https://kcbgroup.com" } }));
+        assert_eq!(added["record"]["category"], "banking");
+
+        // Alice seals the key for Bob; pinned on first sight.
+        let w = call(&mut alice, "team_wrap_for", json!({ "team_id": tid, "account_id": "bob", "public_key": kb["public_key"] }));
+        assert_eq!(w["first_seen"], true);
+        assert!(w["saved"].is_string(), "the pin is saved in Alice's personal vault");
+
+        // Alice pushes; Bob opens with his copy and pulls.
+        let st = call(&mut alice, "team_sync_state", json!({ "team_id": tid }));
+        let mut pushed = st["pending"][0].clone();
+        call(&mut alice, "team_mark_pushed", json!({ "team_id": tid, "accepted": [{ "item": pushed, "revision": 1 }] }));
+        pushed["revision"] = json!(1);
+        call(&mut bob, "team_open", json!({ "team_id": tid, "key_version": 1, "wrapped_key": w["wrapped_key"], "role": "viewer" }));
+        call(&mut bob, "team_apply_pull", json!({ "team_id": tid, "items": [pushed], "cursor": 1 }));
+        let list = call(&mut bob, "team_list", json!({ "team_id": tid }));
+        assert_eq!(list[0]["title"], "KCB corporate");
+        assert!(call_err(&mut bob, "team_add", json!({ "team_id": tid, "record": { "title": "x" } })).contains("view"));
+        // Bob's copy does not open as anyone else's.
+        assert!(call_err(&mut alice, "team_open", json!({ "team_id": tid, "key_version": 2, "wrapped_key": w["wrapped_key"], "role": "manager" })).contains("could not be opened"));
+
+        // Rotation: new key, all content re-encrypted, Bob needs a new copy.
+        call(&mut alice, "team_open", json!({ "team_id": tid, "key_version": 1, "wrapped_key": team["wrapped_key"], "role": "manager" }));
+        let rot = call(&mut alice, "team_rotate_prepare", json!({ "team_id": tid }));
+        assert_eq!(rot["key_version"], 2);
+        let self_copy = call(&mut alice, "team_wrap_for", json!({ "team_id": tid, "account_id": "alice", "public_key": ka["public_key"], "for_rotation": true }));
+        let bob_copy = call(&mut alice, "team_wrap_for", json!({ "team_id": tid, "account_id": "bob", "public_key": kb["public_key"], "for_rotation": true }));
+        call(&mut alice, "team_rotate_commit", json!({ "team_id": tid }));
+        let mut item = rot["items"][0].clone();
+        item["revision"] = json!(5);
+        call(&mut alice, "team_apply_pull", json!({ "team_id": tid, "items": [item.clone()], "cursor": 5 }));
+        assert_eq!(call(&mut alice, "team_list", json!({ "team_id": tid })).as_array().unwrap().len(), 1);
+        assert!(call_err(&mut bob, "team_apply_pull", json!({ "team_id": tid, "items": [item.clone()], "cursor": 5 })).contains("different record or vault"));
+        call(&mut bob, "team_open", json!({ "team_id": tid, "key_version": 2, "wrapped_key": bob_copy["wrapped_key"], "role": "viewer" }));
+        call(&mut bob, "team_apply_pull", json!({ "team_id": tid, "items": [item], "cursor": 5 }));
+        let _ = self_copy;
+
+        // The server swapping Bob's key is caught.
+        let mallory = person_key();
+        let err = call_err(&mut alice, "team_wrap_for", json!({ "team_id": tid, "account_id": "bob", "public_key": mallory }));
+        assert!(err.starts_with("key_changed"));
+        call(&mut alice, "team_wrap_for", json!({ "team_id": tid, "account_id": "bob", "public_key": mallory, "trust_new": true }));
+
+        // Locking forgets every team key.
+        call(&mut alice, "lock", json!({}));
+        assert!(call_err(&mut alice, "team_list", json!({ "team_id": tid })).contains("not open"));
+    }
+
+    fn person_key() -> Value {
+        let mut s = person();
+        call(&mut s, "team_account_key", json!({ "account_id": "m", "stored": null }))["public_key"].clone()
     }
 }

@@ -462,6 +462,25 @@ class RotateView(APIView):
 
 
 class GroupRulesView(APIView):
+    def get(self, request, team_id):
+        """Search the organization's Microsoft 365 groups (managers)."""
+        from entra import graph
+        from entra.models import DirectoryConnection
+
+        team = _team_for(request, team_id)
+        if team is None:
+            return _not_found()
+        if not _can_manage(team, request.user):
+            return Response({"detail": "only managers can change group access"}, status=403)
+        conn = DirectoryConnection.objects.filter(organization=team.organization).first()
+        if conn is None:
+            return Response({"connected": False, "groups": []})
+        try:
+            groups = graph.client_for(conn.tenant_id).search_groups(str(request.query_params.get("q", ""))[:100], limit=15)
+        except graph.GraphError as e:
+            return Response({"detail": str(e)}, status=502)
+        return Response({"connected": True, "groups": [{"id": g["id"], "name": g["name"]} for g in groups]})
+
     def post(self, request, team_id):
         from entra import graph
         from entra.models import DirectoryConnection

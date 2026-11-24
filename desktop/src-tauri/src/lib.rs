@@ -1,6 +1,7 @@
 mod bridge;
 mod commands;
 mod managed;
+mod teams;
 mod state;
 
 use state::AppState;
@@ -44,6 +45,7 @@ pub fn run() {
             bridge::bridge_list_paired,
             bridge::bridge_revoke_paired,
             managed::managed_settings,
+            teams::team_invoke,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

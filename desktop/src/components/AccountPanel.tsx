@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-import { loadSession, login, logout, registerAccount, type AccountSession } from "../account";
+import { api, loadSession, login, logout, registerAccount, type AccountSession } from "../account";
+import { fingerprintOf } from "../teams";
 import { emailNotAllowed, managed } from "../managed";
 import { forgetKeyringRevision } from "../sync";
 
@@ -111,6 +112,13 @@ export function LoggedOut({ onLoggedIn, submitLabel }: { onLoggedIn: (session: A
 
 function LoggedIn({ session, syncError, onLoggedOut }: { session: AccountSession; syncError: string | null; onLoggedOut: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [fingerprint, setFingerprint] = useState<string | null>(null);
+  useEffect(() => {
+    api(session, "GET", "/api/teams/key/")
+      .then((k) => fingerprintOf(k.public_key))
+      .then(setFingerprint)
+      .catch(() => setFingerprint(null));
+  }, [session]);
   async function doLogout() {
     setBusy(true);
     try {
@@ -133,6 +141,11 @@ function LoggedIn({ session, syncError, onLoggedOut }: { session: AccountSession
         </button>
       </div>
       <p className="faint">Signing out stops syncing. Your vault stays on this computer.</p>
+      {fingerprint && (
+        <p className="faint">
+          Your team vault key fingerprint: <code>{fingerprint}</code>. If a manager asks, read this out so they know your key is really yours.
+        </p>
+      )}
     </div>
   );
 }
