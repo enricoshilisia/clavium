@@ -153,3 +153,26 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Email verification ships switched off. See accounts/email_verification.py:
+# "off" (default), "optional" (send emails, do not block), "required"
+# (unverified accounts cannot sign in a new device or the console).
+CLAVIUM_EMAIL_VERIFICATION = os.environ.get("CLAVIUM_EMAIL_VERIFICATION", "off").strip().lower()
+# Base for links in emails, e.g. https://clavium-api.example.com. Falls
+# back to the address the request came in on.
+CLAVIUM_PUBLIC_URL = os.environ.get("CLAVIUM_PUBLIC_URL", "")
+
+# Outgoing mail. With no EMAIL_HOST set, messages are printed to the
+# server log instead of sent, which is safe while verification is off.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.smtp.EmailBackend" if EMAIL_HOST else "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
+EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() == "true"
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "15"))
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Clavium <no-reply@clavium.local>")

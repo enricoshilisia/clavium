@@ -39,6 +39,9 @@ class Account(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Set once the owner proves they can read mail at `email`. Whether an
+    # unverified account may sign in depends on CLAVIUM_EMAIL_VERIFICATION.
+    email_verified_at = models.DateTimeField(null=True, blank=True)
 
     objects = AccountManager()
 
@@ -47,6 +50,10 @@ class Account(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+    @property
+    def email_verified(self) -> bool:
+        return self.email_verified_at is not None
 
 
 def _generate_token() -> str:
@@ -131,3 +138,38 @@ class DeviceToken(models.Model):
         if token.revoked_at is not None or token.device.is_revoked:
             return None
         return token
+
+
+class EmailVerification(models.Model):
+    """One pending "prove you own this inbox" challenge.
+
+    The email carries both a 6-digit code (typed into an app) and a link
+    (clicked in a browser). Only hashes are stored. A code is short, so it
+    is also limited by attempts; the link token is long enough on its own.
+    """
+
+    CODE_ATTEMPTS = 5
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(Account, related_name="email_verifications", on_delete=models.CASCADE)
+    # The address this challenge was sent to, so a later email change can
+    # never be confirmed by an old message.
+    email = models.EmailField()
+    code_hash = models.CharField(max_length=64)
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    attempts = models.PositiveSmallIntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["account", "created_at"])]
+
+    @staticmethod
+    def hash_code(account_id, code: str) -> str:
+        # Salted with the account id so equal codes never share a hash.
+        return _hash_token(f"{account_id}:{code}")
+
+    @staticmethod
+    def hash_link(token: str) -> str:
+        return _hash_token(token)

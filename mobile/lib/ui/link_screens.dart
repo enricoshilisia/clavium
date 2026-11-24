@@ -69,14 +69,20 @@ class _ShowLinkQrScreenState extends State<ShowLinkQrScreen> {
           child: link == null
               ? (status == null ? const Padding(padding: EdgeInsets.all(80), child: CircularProgressIndicator()) : const SizedBox())
               : Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
                   child: QrImageView(
                     key: const Key('link-qr'),
                     data: link!.qr,
-                    size: 240,
+                    // Large modules read much faster off a screen, from further away.
+                    size: (MediaQuery.sizeOf(context).shortestSide - 80).clamp(220.0, 360.0),
                     backgroundColor: Colors.white,
-                    errorCorrectionLevel: QrErrorCorrectLevel.M,
+                    // Screens do not get scratched, so less redundancy means
+                    // fewer, bigger squares.
+                    errorCorrectionLevel: QrErrorCorrectLevel.L,
+                    gapless: true,
+                    eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Colors.black),
+                    dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Colors.black),
                   ),
                 ),
         ),
@@ -116,7 +122,12 @@ class _ShowLinkQrScreenState extends State<ShowLinkQrScreen> {
 Future<void> scanAndApproveLink(BuildContext context, AppState app, {String? scanned}) async {
   final value = scanned ??
       await Navigator.of(context).push<String>(
-        MaterialPageRoute(builder: (_) => const ScanScreen(accept: _isLink, title: 'Scan sign-in QR code')),
+        MaterialPageRoute(builder: (_) => const ScanScreen(
+          accept: _isLink,
+          title: 'Scan sign-in QR code',
+          hint: 'Point your camera at the QR code on the other device',
+          rejectMessage: 'That is not a Clavium sign-in code. Open "Sign in with QR code" on the new device.',
+        )),
       );
   if (value == null || !context.mounted) return;
   LinkInspection l;

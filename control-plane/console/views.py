@@ -3,6 +3,8 @@ SCIM provisioning and the audit log. Server-rendered, session sign-in with
 the Clavium account (owners and admins only). It never sees vault
 contents: everything here is metadata the control plane already holds."""
 
+from accounts import email_verification
+
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -38,6 +40,10 @@ def login_view(request):
             cache.set(key, attempts + 1, 300)
             messages.error(request, "That email and password do not match a Clavium account.")
             return render(request, "console/login.html", status=401)
+        if email_verification.blocks_sign_in(user):
+            email_verification.send(user, request)
+            messages.error(request, f"Verify your email address first. We sent a link to {user.email}.")
+            return render(request, "console/login.html", status=403)
         login(request, user)
         AuditLogEntry.record(organization=None, actor=user, action="console.signed_in", obj=user, ip=_client_ip(request))
         return redirect(request.GET.get("next") or "console-home")

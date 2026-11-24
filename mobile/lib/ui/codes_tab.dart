@@ -17,7 +17,11 @@ class CodesTab extends StatelessWidget {
 
   Future<void> _scan(BuildContext context) async {
     final uri = await Navigator.of(context).push<String>(MaterialPageRoute(
-        builder: (_) => ScanScreen(accept: (v) => v.startsWith('otpauth://') || v.startsWith('clavium://link'))));
+        builder: (_) => ScanScreen(
+              accept: (v) => v.startsWith('otpauth://') || v.startsWith('clavium://link'),
+              hint: 'Scan a 2FA setup code or a Clavium sign-in code',
+              rejectMessage: 'That QR code is not a 2FA setup code or a Clavium sign-in code.',
+            )));
     if (uri == null || !context.mounted) return;
     if (uri.startsWith('clavium://link')) return scanAndApproveLink(context, app, scanned: uri);
     try {

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Confirm your email</title>
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#060E1C; color:#E9EDF5;
+         font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; padding:16px; box-sizing:border-box; }
+  .card { background:#102244; border:1px solid rgba(154,182,224,.16); border-radius:14px; padding:28px; max-width:420px; width:100%; }
+  .brand { font-weight:700; font-size:18px; margin-bottom:18px; } .brand span { color:#C9A227; }
+  h1 { font-size:20px; margin:0 0 8px; } p { color:#9FB0C9; margin:0 0 18px; }
+  button { width:100%; background:#3D74C4; color:#fff; border:0; border-radius:8px; padding:12px; font:inherit; font-weight:600; cursor:pointer; }
+  .ok { color:#3FAE6B; } .bad { color:#D9534F; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">Clavi<span>um</span></div>
+  {% if state == "confirm" %}
+    <h1>Confirm your email</h1>
+    <p>Confirm that <strong>{{ email }}</strong> belongs to you.</p>
+    <form method="post">{% csrf_token %}<input type="hidden" name="t" value="{{ token }}"><button type="submit">Confirm my email</button></form>
+  {% elif state == "done" %}
+    <h1 class="ok">Email confirmed</h1>
+    <p>{{ email }} is verified. You can close this page and go back to the Clavium app.</p>
+  {% elif state == "off" %}
+    <h1>Nothing to do</h1>
+    <p>Email verification is not turned on for this server.</p>
+  {% else %}
+    <h1 class="bad">This link no longer works</h1>
+    <p>It has expired or was already used. Open the Clavium app and ask for a new code.</p>
+  {% endif %}
+</div>
+</body>
+</html>

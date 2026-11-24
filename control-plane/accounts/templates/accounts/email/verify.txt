@@ -1,0 +1,16 @@
+{% autoescape off %}Hello{% if name %} {{ name }}{% endif %},
+
+Your Clavium verification code is:
+
+    {{ code }}
+
+Type it into the Clavium app, or open this link to confirm your email address:
+
+{{ link }}
+
+The code and link work for {{ minutes }} minutes.
+
+If you did not create a Clavium account, you can ignore this email. Nobody can use your address without this code.
+
+Clavium will never ask for your master password by email.
+{% endautoescape %}

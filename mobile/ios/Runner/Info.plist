@@ -8,6 +8,8 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock your Clavium vault with Face ID.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Clavium reads QR codes from screenshots you choose. Nothing else in your photos is accessed.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan the QR code a website shows when you turn on two-factor authentication.</string>
 	<key>CFBundleDisplayName</key>

@@ -2,11 +2,13 @@ from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import include, path
 
+from accounts.views import verify_email_page
 from vaults.urls import shared_vault_urlpatterns
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", lambda request: JsonResponse({"status": "ok"})),
+    path("verify-email/", verify_email_page, name="verify-email"),
     path("api/accounts/", include("accounts.urls")),
     path("api/vaults/", include("vaults.urls")),
     path("api/sync/", include("sync.urls")),

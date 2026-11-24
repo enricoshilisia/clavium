@@ -424,6 +424,9 @@ class AppState extends ChangeNotifier {
 
   // ---------- QR device linking ----------
 
+  static bool _sameServer(String a, String b) =>
+      a.trim().replaceAll(RegExp(r'/+$'), '').toLowerCase() == b.trim().replaceAll(RegExp(r'/+$'), '').toLowerCase();
+
   /// New device: start a link and return what the QR code shows. Call
   /// [waitForLink] next.
   Future<LinkStart> startLink(String server) async {
@@ -439,7 +442,9 @@ class AppState extends ChangeNotifier {
       'id': res['id'] as String,
       'k': qr['public_key'] as String,
       'x': qr['link_secret'] as String,
-      's': server,
+      // Left out for the default server: a shorter link is a sparser QR
+      // code, which phone cameras read faster.
+      if (!_sameServer(server, defaultServer)) 's': server,
     }).toString();
     return LinkStart(server: server, id: res['id'] as String, pollToken: res['poll_token'] as String, qr: uri, code: qr['code'] as String);
   }
@@ -493,8 +498,9 @@ class AppState extends ChangeNotifier {
     if (uri == null || uri.scheme != 'clavium' || uri.host != 'link' || q['id'] == null || q['k'] == null || q['x'] == null) {
       throw CoreException('That is not a Clavium sign-in QR code.');
     }
-    if (q['s'] != null && q['s'] != s.server) {
-      throw CoreException('That device is signing in to a different Clavium server (${q['s']}).');
+    final target = q['s'] ?? defaultServer;
+    if (!_sameServer(target, s.server)) {
+      throw CoreException('That device is signing in to a different Clavium server ($target).');
     }
     final info = await api.linkInfo(s, q['id']!);
     if (info['public_key'] != q['k']) throw CoreException('This QR code does not match its sign-in request.');
