@@ -655,3 +655,20 @@
 .team-add { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
 .team-add .clv-input:first-child { flex: 1; min-width: 0; }
 .team-help { font-size: 12px; margin: 2px 0 6px; }
+
+/* ---- share links and link checks ---- */
+.share-row { display: flex; gap: 10px; }
+.share-row .clv-label { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.share-check { display: flex; gap: 8px; align-items: center; margin: 8px 0; font-size: 13px; }
+.share-pass { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.share-pass .faint { font-size: 12px; }
+.share-link { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; word-break: break-all; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(154, 182, 224, 0.16); border-radius: 8px; padding: 10px; margin-bottom: 10px; user-select: all; }
+.mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+.verdict-card { border-radius: 10px; padding: 12px 14px; margin-top: 12px; display: flex; flex-direction: column; gap: 6px; line-height: 1.45; }
+.verdict-title { font-weight: 700; font-size: 15px; }
+.verdict-host { font-size: 12px; word-break: break-all; }
+.verdict-trusted { background: rgba(63, 174, 107, 0.14); border: 1px solid rgba(63, 174, 107, 0.4); }
+.verdict-unknown { background: rgba(154, 182, 224, 0.08); border: 1px solid rgba(154, 182, 224, 0.2); }
+.verdict-suspicious { background: rgba(201, 162, 39, 0.14); border: 1px solid rgba(201, 162, 39, 0.45); }
+.verdict-dangerous { background: rgba(217, 83, 79, 0.18); border: 1px solid rgba(217, 83, 79, 0.6); }
+.website-warning { margin-top: -4px; margin-bottom: 8px; }

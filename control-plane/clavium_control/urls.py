@@ -4,6 +4,7 @@ from django.urls import include, path
 
 from accounts.views import verify_email_page
 from entra.notifications import notify as entra_notify
+from shares.views import share_page
 from vaults.urls import shared_vault_urlpatterns
 
 urlpatterns = [
@@ -12,6 +13,8 @@ urlpatterns = [
     path("verify-email/", verify_email_page, name="verify-email"),
     path("api/accounts/", include("accounts.urls")),
     path("api/vaults/", include("vaults.urls")),
+    path("api/shares/", include("shares.urls")),
+    path("s/<uuid:share_id>", share_page, name="share-page"),
     path("api/teams/", include("teams.urls")),
     path("api/sync/", include("sync.urls")),
     path("scim/v2/", include("scim.urls")),

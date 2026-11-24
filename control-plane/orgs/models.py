@@ -110,6 +110,8 @@ class OrgPolicy(models.Model):
     max_auto_lock_minutes = models.PositiveSmallIntegerField(default=15)
     allow_export = models.BooleanField(default=True)
     require_recovery_key = models.BooleanField(default=False)
+    # Members may send items with one-time share links.
+    allow_share_links = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(Account, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
@@ -118,6 +120,7 @@ class OrgPolicy(models.Model):
         "max_auto_lock_minutes": 0,  # 0 = no limit
         "allow_export": True,
         "require_recovery_key": False,
+        "allow_share_links": True,
     }
 
     def as_dict(self):
@@ -126,6 +129,7 @@ class OrgPolicy(models.Model):
             "max_auto_lock_minutes": self.max_auto_lock_minutes,
             "allow_export": self.allow_export,
             "require_recovery_key": self.require_recovery_key,
+            "allow_share_links": self.allow_share_links,
         }
 
     @classmethod
@@ -143,6 +147,7 @@ class OrgPolicy(models.Model):
                 eff["max_auto_lock_minutes"] = p.max_auto_lock_minutes if not cur else min(cur, p.max_auto_lock_minutes)
             eff["allow_export"] = eff["allow_export"] and p.allow_export
             eff["require_recovery_key"] = eff["require_recovery_key"] or p.require_recovery_key
+            eff["allow_share_links"] = eff["allow_share_links"] and p.allow_share_links
         eff["organizations"] = sources
         return eff
 

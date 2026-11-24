@@ -24,6 +24,8 @@ import BrowserPanel from "./BrowserPanel";
 import RecordForm from "./RecordForm";
 import SecurityPanel from "./SecurityPanel";
 import TeamPanel, { NewTeamPanel } from "./TeamPanel";
+import { LinkCheckPanel, ShareDialog, SharedLinksPanel, VerdictCard } from "./SharePanels";
+import { checkLink, type LinkCheck } from "../shares";
 import { listTeams, ROLE_LABELS, syncTeam, teamAdd, teamDelete, teamRecords, teamUpdate, type OrgInfo, type TeamInfo } from "../teams";
 
 interface Props {
@@ -48,7 +50,9 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   const [mode, setMode] = useState<Mode>("view");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [panel, setPanel] = useState<"account" | "browser" | "security" | null>(null);
+  const [panel, setPanel] = useState<"account" | "browser" | "security" | "links" | "check" | null>(null);
+  const [shareFor, setShareFor] = useState<{ id: string; title: string; teamId?: string; hasTotp: boolean } | "note" | null>(null);
+  const [websiteCheck, setWebsiteCheck] = useState<LinkCheck | null>(null);
   const [kinds, setKinds] = useState<KindInfo[]>([]);
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
 
@@ -224,6 +228,21 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   }, [source, search, filter]);
 
   const selected = source.find((r) => r.id === selectedId) ?? null;
+  const shareAllowed = !!session && policy?.allow_share_links !== false;
+
+  // Phishing guard on the item's own website address.
+  const selectedUrl = selected?.url ?? "";
+  useEffect(() => {
+    setWebsiteCheck(null);
+    if (!selectedUrl) return;
+    let live = true;
+    checkLink(selectedUrl)
+      .then((c) => live && setWebsiteCheck(c.verdict === "dangerous" || c.verdict === "suspicious" ? c : null))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [selectedUrl, records, teamRecs]);
   const catLabel = (slug: string | null) => categories.find((c) => c.slug === slug)?.label ?? "Uncategorised";
 
   // ---- mutations ----
@@ -378,6 +397,12 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           <button className="clv-btn clv-btn-ghost" onClick={() => setPanel("browser")}>
             Browser
           </button>
+          <button className="clv-btn clv-btn-ghost" onClick={() => setPanel(session ? "links" : "account")}>
+            Shared links
+          </button>
+          <button className="clv-btn clv-btn-ghost" onClick={() => setPanel("check")}>
+            Check a link
+          </button>
           <button className="clv-btn clv-btn-ghost" onClick={onLock} title={`Auto-locks after ${autoLockMinutes} min idle`}>
             Lock
           </button>
@@ -395,6 +420,18 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
         />
       )}
       {panel === "browser" && <BrowserPanel onClose={() => setPanel(null)} />}
+      {panel === "check" && <LinkCheckPanel onClose={() => setPanel(null)} />}
+      {panel === "links" && session && (
+        <SharedLinksPanel
+          session={session}
+          onClose={() => setPanel(null)}
+          onNewNote={() => {
+            setPanel(null);
+            setShareFor("note");
+          }}
+        />
+      )}
+      {shareFor && session && <ShareDialog session={session} item={shareFor === "note" ? null : shareFor} onClose={() => setShareFor(null)} />}
       {newTeam && session && (
         <NewTeamPanel
           session={session}
@@ -552,14 +589,26 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
                   </button>
                 )}
               </h2>
-              {canWrite && (
+              {(canWrite || shareAllowed) && (
                 <div className="detail-header-actions">
+                  {shareAllowed && canWrite && (
+                    <button
+                      className="clv-btn"
+                      onClick={() => setShareFor({ id: selected.id, title: selected.title, teamId: activeTeam?.id, hasTotp: !!selected.totp_secret })}
+                    >
+                      Share
+                    </button>
+                  )}
+                  {canWrite && (
                   <button className="clv-btn" onClick={() => setMode("edit")}>
                     Edit
                   </button>
+                  )}
+                  {canWrite && (
                   <button className="clv-btn clv-btn-danger" onClick={deleteSelected}>
                     Delete
                   </button>
+                  )}
                 </div>
               )}
             </div>
@@ -590,6 +639,11 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
             {selected.username && <DetailField label="Username" value={selected.username} onCopy={copy} />}
             {selected.password && <DetailField label="Password" value={selected.password} onCopy={copy} secret />}
             {selected.url && <DetailField label="Website" value={selected.url} onCopy={copy} link />}
+            {websiteCheck && (
+              <div className="website-warning">
+                <VerdictCard check={websiteCheck} />
+              </div>
+            )}
             {selected.totp_secret && <TotpField secret={selected.totp_secret} onCopy={copy} />}
             {Object.entries(selected.fields).map(([k, v]) => (
               <DetailField key={k} label={fieldLabel(k)} value={v} onCopy={copy} secret={SECRET_FIELDS.has(k)} />

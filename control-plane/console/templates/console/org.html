@@ -81,6 +81,7 @@
       </div>
       <p><label><input type="checkbox" name="allow_export" {% if policy.allow_export %}checked{% endif %}> Allow exporting vault contents</label></p>
       <p><label><input type="checkbox" name="require_recovery_key" {% if policy.require_recovery_key %}checked{% endif %}> Ask members to create a recovery key</label></p>
+      <p><label><input type="checkbox" name="allow_share_links" {% if policy.allow_share_links %}checked{% endif %}> Allow sending items with one-time share links</label></p>
       <button class="primary" type="submit">Save policy</button>
     </form>
     <p class="faint">Apps apply the strictest policy of every organization a person belongs to.</p>

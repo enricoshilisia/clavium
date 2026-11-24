@@ -61,6 +61,15 @@ impl Teams {
         *self = Teams::default();
     }
 
+    /// Website addresses in every open team vault (for the phishing guard).
+    pub fn urls(&self) -> Vec<String> {
+        self.open.values().flat_map(|t| t.vault.list_records()).map(|r| r.url).filter(|u| !u.is_empty()).collect()
+    }
+
+    pub fn record(&self, team_id: Uuid, id: Uuid) -> Option<Record> {
+        self.open.get(&team_id)?.vault.get_record(id).cloned()
+    }
+
     fn keys(&self) -> Result<(&AccountKeys, &str), String> {
         match (&self.keys, &self.account_id) {
             (Some(k), Some(id)) => Ok((k, id.as_str())),

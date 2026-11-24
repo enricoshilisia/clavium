@@ -27,6 +27,7 @@ clavium-security-core = { path = "../../security-core" }
 clavium-api = { path = "../../bindings/api" }
 uuid = { version = "1.10.0", features = ["v4", "serde"] }
 base64 = "0.22.1"
+zeroize = "1.8.1"
 # The local bridge a browser extension talks to for autofill — a plain
 # blocking HTTP server on its own OS thread is enough for occasional,
 # single-tab traffic, and it keeps this out of Tauri's own async runtime

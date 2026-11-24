@@ -11,14 +11,26 @@ function el(tag, props = {}, children = []) {
   return node;
 }
 
-async function currentTabHost() {
+async function currentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab?.url) return null;
   try {
-    return new URL(tab.url).hostname;
+    const u = new URL(tab.url);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return { url: tab.url, host: u.hostname };
   } catch {
     return null;
   }
+}
+
+function verdictBox(check) {
+  if (!check || check.verdict === "unknown") return null;
+  if (check.verdict === "trusted") return el("div", { class: "verdict verdict-ok", text: check.reasons[0] });
+  const box = el("div", { class: `verdict ${check.verdict === "dangerous" ? "verdict-danger" : "verdict-warn"}` }, [
+    el("strong", { text: check.verdict === "dangerous" ? "Stop: this looks like a fake site" : "Be careful on this page" }),
+  ]);
+  check.reasons.forEach((r) => box.appendChild(el("div", { text: r })));
+  return box;
 }
 
 function renderPairingForm(message) {
@@ -94,27 +106,36 @@ async function renderMain() {
     return;
   }
 
-  const host = await currentTabHost();
+  const tab = await currentTab();
+  const host = tab?.host;
   if (!host) {
     app.replaceChildren(el("p", { class: "muted", text: "No page open here." }));
     return;
   }
 
   let hits;
+  let check = null;
   try {
+    check = await checkPage(tab.url).catch(() => null);
     hits = await search(host);
   } catch (err) {
     return renderDisconnected(err);
   }
 
   app.replaceChildren();
+  const box = verdictBox(check);
+  if (box) app.appendChild(box);
+  if (check?.verdict === "dangerous") {
+    app.appendChild(el("p", { class: "muted", text: "Clavium will not fill passwords on this page. Close it and go to the real site yourself." }));
+    return;
+  }
   if (hits.length === 0) {
     app.appendChild(el("p", { class: "muted", text: `No saved logins for ${host}.` }));
   } else {
     const list = el("div", { class: "hit-list" });
     hits.forEach((hit) => {
       const fillBtn = el("button", { text: "Fill" });
-      fillBtn.addEventListener("click", () => fillInto(hit.id, fillBtn));
+      fillBtn.addEventListener("click", () => fillInto(hit.id, tab.url, fillBtn));
       list.appendChild(
         el("div", { class: "hit" }, [
           el("div", { class: "hit-text" }, [
@@ -149,11 +170,11 @@ function renderDisconnected(err) {
   );
 }
 
-async function fillInto(recordId, button) {
+async function fillInto(recordId, pageUrl, button) {
   button.disabled = true;
   button.textContent = "…";
   try {
-    const { username, password } = await reveal(recordId);
+    const { username, password } = await reveal(recordId, pageUrl);
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     await chrome.tabs.sendMessage(tab.id, { type: "clavium-fill", username, password });
     window.close();

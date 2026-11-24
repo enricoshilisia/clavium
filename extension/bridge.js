@@ -68,6 +68,11 @@ async function search(host) {
   return bridgeFetch(`/search?host=${encodeURIComponent(host)}`);
 }
 
-async function reveal(id) {
-  return bridgeFetch(`/reveal?id=${encodeURIComponent(id)}`);
+async function reveal(id, pageUrl) {
+  return bridgeFetch(`/reveal?id=${encodeURIComponent(id)}&url=${encodeURIComponent(pageUrl)}`);
+}
+
+/** Phishing guard: is this page really the site it seems to be? */
+async function checkPage(url) {
+  return bridgeFetch(`/check?url=${encodeURIComponent(url)}`);
 }

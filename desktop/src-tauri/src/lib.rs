@@ -1,5 +1,6 @@
 mod bridge;
 mod commands;
+mod guard;
 mod managed;
 mod teams;
 mod state;
@@ -46,6 +47,8 @@ pub fn run() {
             bridge::bridge_revoke_paired,
             managed::managed_settings,
             teams::team_invoke,
+            guard::check_link,
+            guard::share_create,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

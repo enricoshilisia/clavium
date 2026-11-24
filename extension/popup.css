@@ -134,3 +134,8 @@ button {
   background: none;
   text-decoration: underline;
 }
+
+.verdict { border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 4px; line-height: 1.4; }
+.verdict-ok { background: rgba(63, 174, 107, 0.14); color: #9be3b6; }
+.verdict-warn { background: rgba(201, 162, 39, 0.16); color: var(--gold-300); }
+.verdict-danger { background: rgba(217, 83, 79, 0.2); color: #ffc4c2; border: 1px solid rgba(217, 83, 79, 0.6); }

@@ -505,6 +505,36 @@ impl Session {
                 Ok(Value::Null)
             }
 
+            // ---- phishing guard ----
+            "check_link" => {
+                let url: String = arg(a, "url")?;
+                let mut saved: Vec<String> = self.vault.as_ref().map(|v| v.list_records().into_iter().map(|r| r.url).filter(|u| !u.is_empty()).collect()).unwrap_or_default();
+                saved.extend(self.teams.urls());
+                Ok(serde_json::to_value(clavium_security_core::assess_link(&url, &saved)).unwrap())
+            }
+
+            // ---- share links ----
+            "share_create" => {
+                let passphrase: Option<String> = opt_arg(a, "passphrase")?;
+                let include_totp: bool = opt_arg(a, "include_totp")?.unwrap_or(false);
+                let text: Option<String> = opt_arg(a, "text")?;
+                let payload = if let Some(text) = text {
+                    clavium_security_core::share::payload_for_text(&opt_arg::<String>(a, "title")?.unwrap_or_else(|| "Shared note".into()), &text)
+                } else {
+                    let id = id_arg(a)?;
+                    let team: Option<Uuid> = opt_arg(a, "team_id")?;
+                    let r = match team {
+                        Some(t) => self.teams.record(t, id).ok_or("no such record")?,
+                        None => self.vault()?.get_record(id).cloned().ok_or("no such record")?,
+                    };
+                    clavium_security_core::share::payload_for(&r, include_totp)
+                };
+                let bytes = zeroize::Zeroizing::new(serde_json::to_vec(&payload).unwrap());
+                let rounds = if self.fast_kdf { 1000 } else { clavium_security_core::share::PBKDF2_ROUNDS };
+                let draft = clavium_security_core::share::create_with_rounds(&bytes, passphrase.as_deref(), rounds).map_err(|e| e.to_string())?;
+                Ok(json!({ "draft": draft, "rounds": rounds }))
+            }
+
             // ---- sync ----
             "sync_state" => {
                 let v = self.vault()?;

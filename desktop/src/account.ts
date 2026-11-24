@@ -238,6 +238,7 @@ export interface Policy {
   max_auto_lock_minutes: number;
   allow_export: boolean;
   require_recovery_key: boolean;
+  allow_share_links?: boolean;
   organizations: string[];
 }
 

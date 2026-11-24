@@ -161,7 +161,7 @@ class MyPolicyView(APIView):
 
 
 class OrgPolicyView(APIView):
-    FIELDS = ("min_master_password_length", "max_auto_lock_minutes", "allow_export", "require_recovery_key")
+    FIELDS = ("min_master_password_length", "max_auto_lock_minutes", "allow_export", "require_recovery_key", "allow_share_links")
 
     def get(self, request, org_id):
         org = get_object_or_404(Organization, id=org_id)
@@ -181,7 +181,7 @@ class OrgPolicyView(APIView):
             if f not in request.data:
                 continue
             v = request.data[f]
-            if f in ("allow_export", "require_recovery_key"):
+            if f in ("allow_export", "require_recovery_key", "allow_share_links"):
                 if not isinstance(v, bool):
                     errors[f] = "must be true or false"
                     continue

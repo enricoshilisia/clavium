@@ -31,6 +31,10 @@ sha2 = "0.10.8"
 # HOTP/TOTP (RFC 4226 / RFC 6238) for the Authenticator — HMAC over a
 # selectable hash, all RustCrypto, same project as everything above.
 hmac = "0.12.1"
+# Share links: an optional passphrase is stretched with PBKDF2-SHA256, the
+# one slow KDF every browser has built in (the recipient decrypts in a
+# plain web page with WebCrypto, no app needed).
+pbkdf2 = { version = "0.12.2", default-features = false, features = ["hmac"] }
 sha1 = "0.10.6"
 # HKDF-SHA256 for deriving key-slot wrapping keys from high-entropy inputs
 # (a passkey's PRF output, a recovery key), where Argon2 adds nothing.

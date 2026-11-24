@@ -13,7 +13,9 @@ pub mod keypair;
 pub mod keyring;
 pub mod link;
 pub mod otp;
+pub mod phishing;
 pub mod record;
+pub mod share;
 pub mod sync;
 pub mod team;
 pub mod vault;
@@ -30,6 +32,7 @@ pub use otp::{
 pub use categorize::{auto_categorize, category_label, detect_card_brand, suggest_category, CATEGORIES};
 pub use keyring::{generate_recovery_key, KeySlot, Keyring, KeyringHeader, SlotKind};
 pub use link::{seal_for_link, verification_code, LinkEnvelope, LinkRequest};
+pub use phishing::{assess as assess_link, Assessment, Verdict};
 pub use record::{CategorySource, CustomField, Record, RecordKind};
 pub use sync::{EncryptedItem, MergeReport};
 pub use team::{fingerprint, new_team_key, wrap_team_key, AccountKeys, StoredAccountKey, WrappedTeamKey};

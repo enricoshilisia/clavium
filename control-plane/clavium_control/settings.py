@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "link",
     "entra",
     "teams",
+    "shares",
 ]
 
 MIDDLEWARE = [
@@ -134,6 +135,8 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": os.environ.get("CLAVIUM_AUTH_RATE", "10/min"),
         "user": os.environ.get("CLAVIUM_USER_RATE", "600/min"),
+        # Public share-link endpoints, per IP.
+        "share": os.environ.get("CLAVIUM_SHARE_RATE", "30/min"),
     },
     # Caddy is the only proxy in front of gunicorn.
     "NUM_PROXIES": 1,

@@ -261,6 +261,7 @@ def org_action(request, org_id):
             return back
         p.allow_export = request.POST.get("allow_export") == "on"
         p.require_recovery_key = request.POST.get("require_recovery_key") == "on"
+        p.allow_share_links = request.POST.get("allow_share_links") == "on"
         p.updated_by = request.user
         p.save()
         AuditLogEntry.record(organization=org, actor=request.user, action="policy.updated", obj=p, **p.as_dict())

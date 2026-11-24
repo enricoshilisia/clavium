@@ -266,18 +266,39 @@ fn handle_search(app: &AppHandle, origin: &str, query: &str) -> Response<std::io
     json_response(200, Some(origin), &hits)
 }
 
+/// Phishing guard for the page the extension is on.
+fn handle_check(app: &AppHandle, origin: &str, query: &str) -> Response<std::io::Cursor<Vec<u8>>> {
+    let Some(url) = query_param(query, "url") else {
+        return error_response(400, Some(origin), "missing url parameter");
+    };
+    let state = app.state::<AppState>();
+    json_response(200, Some(origin), &crate::guard::check(&state, &url))
+}
+
 fn handle_reveal(app: &AppHandle, origin: &str, query: &str) -> Response<std::io::Cursor<Vec<u8>>> {
     let Some(id) = query_param(query, "id").and_then(|s| Uuid::parse_str(&s).ok()) else {
         return error_response(400, Some(origin), "missing or invalid id parameter");
     };
-
+    // The page asking must be the record's own site and must not look
+    // like an imitation: a compromised or confused popup cannot pull a
+    // password for one site onto another.
+    let Some(page_url) = query_param(query, "url") else {
+        return error_response(400, Some(origin), "update the Clavium extension (the page address is missing)");
+    };
+    let Some(tab_host) = extract_host(&page_url) else {
+        return error_response(400, Some(origin), "unreadable page address");
+    };
     let state = app.state::<AppState>();
+    let verdict = crate::guard::check(&state, &page_url).verdict;
+    if verdict == clavium_security_core::Verdict::Dangerous {
+        return error_response(403, Some(origin), "this page looks like a fake site; Clavium will not fill a password here");
+    }
     let guard = state.session.lock().unwrap();
     let Some(session) = guard.as_ref() else {
         return error_response(423, Some(origin), "vault is locked");
     };
 
-    match session.vault.get_record(id) {
+    match session.vault.get_record(id).filter(|r| extract_host(&r.url).is_some_and(|h| hosts_match(&h, &tab_host))) {
         Some(record) => json_response(
             200,
             Some(origin),
@@ -370,6 +391,10 @@ pub fn spawn(app: AppHandle) {
                 },
                 (Method::Get, "/search") => match authenticate(&app, request.headers()) {
                     Some(_) => handle_search(&app, origin.as_deref().unwrap_or(""), query),
+                    None => error_response(401, origin.as_deref(), "not paired"),
+                },
+                (Method::Get, "/check") => match authenticate(&app, request.headers()) {
+                    Some(_) => handle_check(&app, origin.as_deref().unwrap_or(""), query),
                     None => error_response(401, origin.as_deref(), "not paired"),
                 },
                 (Method::Get, "/reveal") => match authenticate(&app, request.headers()) {

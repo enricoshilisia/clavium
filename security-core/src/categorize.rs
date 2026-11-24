@@ -49,6 +49,11 @@ pub fn category_label(slug: &str) -> Option<&'static str> {
 
 /// Registrable-domain suffixes per category. A host matches when it equals
 /// the entry or ends with `.` + the entry.
+/// Every domain Clavium recognises in the given categories.
+pub fn known_domains(categories: &[&str]) -> Vec<&'static str> {
+    DOMAINS.iter().filter(|(c, _)| categories.contains(c)).flat_map(|(_, d)| d.iter().copied()).collect()
+}
+
 const DOMAINS: &[(&str, &[&str])] = &[
     (
         "banking",
