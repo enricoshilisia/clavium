@@ -26,6 +26,7 @@ import SecurityPanel from "./SecurityPanel";
 import TeamPanel, { NewTeamPanel } from "./TeamPanel";
 import { LinkCheckPanel, ShareDialog, SharedLinksPanel, VerdictCard } from "./SharePanels";
 import { checkLink, type LinkCheck } from "../shares";
+import { breachState, maybeAutoCheck, onBreachChange } from "../breach";
 import { listTeams, ROLE_LABELS, syncTeam, teamAdd, teamDelete, teamRecords, teamUpdate, type OrgInfo, type TeamInfo } from "../teams";
 
 interface Props {
@@ -132,6 +133,7 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           if (out.changed > 0) await reload();
           setPolicy(await afterSync(s, await vaultHasRecoveryKey().catch(() => false)));
           await syncTeams();
+          maybeAutoCheck();
         } catch (e) {
           setSyncError(e instanceof Error ? e.message : String(e));
         } finally {
@@ -228,6 +230,13 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
   }, [source, search, filter]);
 
   const selected = source.find((r) => r.id === selectedId) ?? null;
+  const [, breachTick] = useState(0);
+  useEffect(() => onBreachChange(() => breachTick((n) => n + 1)), []);
+  useEffect(() => {
+    // Without an account there is no sync to trigger it: check after unlock.
+    if (!session) maybeAutoCheck();
+  }, [session]);
+  const breachHit = selected ? breachState.hits.find((h) => h.id === selected.id) : undefined;
   const shareAllowed = !!session && policy?.allow_share_links !== false;
 
   // Phishing guard on the item's own website address.
@@ -638,6 +647,12 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
 
             {selected.username && <DetailField label="Username" value={selected.username} onCopy={copy} />}
             {selected.password && <DetailField label="Password" value={selected.password} onCopy={copy} secret />}
+            {breachHit && (
+              <div className="clv-notice clv-notice-danger">
+                This password appears {breachHit.count.toLocaleString()} times in leaked password lists. Attackers try these first: change it
+                {canWrite ? " (use Edit and the generator)" : ""}.
+              </div>
+            )}
             {selected.url && <DetailField label="Website" value={selected.url} onCopy={copy} link />}
             {websiteCheck && (
               <div className="website-warning">

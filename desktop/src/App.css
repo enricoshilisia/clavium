@@ -672,3 +672,8 @@
 .verdict-suspicious { background: rgba(201, 162, 39, 0.14); border: 1px solid rgba(201, 162, 39, 0.45); }
 .verdict-dangerous { background: rgba(217, 83, 79, 0.18); border: 1px solid rgba(217, 83, 79, 0.6); }
 .website-warning { margin-top: -4px; margin-bottom: 8px; }
+
+/* ---- breaches ---- */
+.breach-actions { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0 4px; font-size: 12px; }
+.breach-list { margin: 6px 0; padding-left: 18px; }
+.health-note { font-size: 12px; padding: 4px 0; }

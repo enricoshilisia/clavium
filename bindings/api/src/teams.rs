@@ -66,6 +66,11 @@ impl Teams {
         self.open.values().flat_map(|t| t.vault.list_records()).map(|r| r.url).filter(|u| !u.is_empty()).collect()
     }
 
+    /// Every live record in every open team vault, with its team id.
+    pub fn all_records(&self) -> Vec<(Uuid, Record)> {
+        self.open.iter().flat_map(|(id, t)| t.vault.list_records().into_iter().map(move |r| (*id, r))).collect()
+    }
+
     pub fn record(&self, team_id: Uuid, id: Uuid) -> Option<Record> {
         self.open.get(&team_id)?.vault.get_record(id).cloned()
     }

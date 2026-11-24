@@ -172,6 +172,7 @@ class AppState extends ChangeNotifier {
   Future<void> _afterUnlock() async {
     phase = Phase.unlocked;
     refresh();
+    if (liveSync) unawaited(Future<void>.delayed(const Duration(seconds: 3), _maybeCheckBreaches));
     if (session != null) {
       unawaited(syncNow());
       if (liveSync) unawaited(_liveLoop());
@@ -182,6 +183,8 @@ class AppState extends ChangeNotifier {
   void lock() {
     _syncDebounce?.cancel();
     _resetTeams();
+    breachHits = [];
+    breachCheckedAt = null;
     _unlockPasswordLength = null;
     Core.call('lock');
     records = [];
@@ -244,6 +247,7 @@ class AppState extends ChangeNotifier {
           'reused': reused,
           'old': (h['old'] as List).length,
           'without_totp': (h['without_totp'] as List).length,
+          'breached': (h['breached'] as List? ?? const []).length,
           'has_recovery_key': slots().any((x) => x['kind'] == 'recovery'),
         });
         _lastHealthReport = now;
@@ -376,6 +380,72 @@ class AppState extends ChangeNotifier {
       _syncDebounce = Timer(const Duration(seconds: 2), () => unawaited(syncNow()));
     }
   }
+
+  // ---------- breached passwords ----------
+
+  /// From the last check in this unlocked session: [{id, title, count, team_id}].
+  List<Map<String, dynamic>> breachHits = [];
+  DateTime? breachCheckedAt;
+  bool breachChecking = false;
+
+  Future<bool> breachAutoEnabled() async => (await storage.prefs())['breach_auto'] != false;
+  Future<void> setBreachAuto(bool on) async {
+    await storage.setPref('breach_auto', on);
+    notifyListeners();
+  }
+
+  /// Check every saved password against leaked-password lists. Only the
+  /// first 5 characters of each password's SHA-1 leave the device.
+  Future<void> checkBreaches() async {
+    if (phase != Phase.unlocked || breachChecking) return;
+    breachChecking = true;
+    notifyListeners();
+    try {
+      final prefixes = ((Core.call('breach_prefixes') as Map)['prefixes'] as List).cast<String>();
+      final ranges = <String, String>{};
+      for (var i = 0; i < prefixes.length; i += 6) {
+        final batch = prefixes.skip(i).take(6).toList();
+        final bodies = await Future.wait(batch.map(api.pwnedRange));
+        for (var j = 0; j < batch.length; j++) {
+          ranges[batch[j]] = bodies[j];
+        }
+      }
+      if (phase != Phase.unlocked) return;
+      final out = Core.call('breach_apply', {'ranges': ranges}) as Map;
+      breachHits = (out['breached'] as List).map((h) => Map<String, dynamic>.from(h as Map)).toList();
+      breachCheckedAt = DateTime.now();
+      _lastHealthReport = null; // report the new count with the next sync
+    } finally {
+      breachChecking = false;
+      notifyListeners();
+    }
+  }
+
+  Map<String, dynamic>? breachFor(String recordId) => breachHits.where((h) => h['id'] == recordId).firstOrNull;
+
+  Future<void> _maybeCheckBreaches() async {
+    if (breachCheckedAt != null && DateTime.now().difference(breachCheckedAt!) < const Duration(hours: 24)) return;
+    if (!await breachAutoEnabled()) return;
+    try {
+      await checkBreaches();
+    } catch (_) {
+      // offline: next time
+    }
+  }
+
+  /// Email breach status from the server (only with Have I Been Pwned set up).
+  Future<Map<String, dynamic>?> emailBreaches() async {
+    final s = session;
+    if (s == null) return null;
+    try {
+      return Map<String, dynamic>.from(await api.call(s, 'GET', '/api/breaches/mine/') as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>> setEmailBreachCheck(bool enabled) async =>
+      Map<String, dynamic>.from(await api.call(session!, 'POST', '/api/breaches/mine/', body: {'enabled': enabled}) as Map);
 
   // ---------- share links and the phishing guard ----------
 

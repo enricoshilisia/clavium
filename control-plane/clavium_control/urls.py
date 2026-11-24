@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/accounts/", include("accounts.urls")),
     path("api/vaults/", include("vaults.urls")),
     path("api/shares/", include("shares.urls")),
+    path("api/breaches/", include("breaches.urls")),
     path("s/<uuid:share_id>", share_page, name="share-page"),
     path("api/teams/", include("teams.urls")),
     path("api/sync/", include("sync.urls")),

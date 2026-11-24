@@ -161,7 +161,7 @@ class MyPolicyView(APIView):
 
 
 class OrgPolicyView(APIView):
-    FIELDS = ("min_master_password_length", "max_auto_lock_minutes", "allow_export", "require_recovery_key", "allow_share_links")
+    FIELDS = ("min_master_password_length", "max_auto_lock_minutes", "allow_export", "require_recovery_key", "allow_share_links", "check_email_breaches")
 
     def get(self, request, org_id):
         org = get_object_or_404(Organization, id=org_id)
@@ -181,7 +181,7 @@ class OrgPolicyView(APIView):
             if f not in request.data:
                 continue
             v = request.data[f]
-            if f in ("allow_export", "require_recovery_key", "allow_share_links"):
+            if f in ("allow_export", "require_recovery_key", "allow_share_links", "check_email_breaches"):
                 if not isinstance(v, bool):
                     errors[f] = "must be true or false"
                     continue
@@ -209,6 +209,8 @@ class HealthReportView(APIView):
             if not isinstance(v, int) or v < 0 or v > 1_000_000 or (f == "score" and v > 100):
                 return Response({f: "must be a non-negative integer"}, status=400)
             data[f] = v
+        breached = request.data.get("breached", 0)  # older apps do not send it
+        data["breached"] = breached if isinstance(breached, int) and 0 <= breached <= 1_000_000 else 0
         data["has_recovery_key"] = bool(request.data.get("has_recovery_key", False))
         HealthSnapshot.objects.update_or_create(account=request.user, defaults=data)
         return Response(status=204)

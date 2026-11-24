@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { vaultLock } from "./api";
 import { managed } from "./managed";
 import { forgetTeamKey } from "./teams";
+import { forgetBreaches } from "./breach";
 import { cachedPolicy } from "./sync";
 import UnlockScreen from "./components/UnlockScreen";
 import VaultView from "./components/VaultView";
@@ -20,6 +21,7 @@ function App() {
 
   const lock = useCallback(() => {
     forgetTeamKey();
+    forgetBreaches();
     vaultLock().finally(() => {
       setUnlocked(false);
       setRecords([]);

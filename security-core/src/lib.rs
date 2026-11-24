@@ -3,6 +3,7 @@
 //! guarantee the whole product depends on: a vault cannot be read without
 //! its master password, and can always be read with it.
 
+pub mod breach;
 pub mod categorize;
 pub mod crypto;
 pub mod error;

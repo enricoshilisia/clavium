@@ -28,7 +28,7 @@
           <select name="role" onchange="this.form.submit()">{% for v, l in roles %}<option value="{{ v }}" {% if v == m.role %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
         </form>
       </td>
-      <td>{% if m.health %}<span class="{% if m.health.score >= 80 %}score-good{% elif m.health.score >= 50 %}score-ok{% else %}score-bad{% endif %}">{{ m.health.score }}</span> <span class="faint">{{ m.health.weak }} weak · {{ m.health.reused }} reused</span>{% else %}<span class="faint">not reported</span>{% endif %}</td>
+      <td>{% if m.health %}<span class="{% if m.health.score >= 80 %}score-good{% elif m.health.score >= 50 %}score-ok{% else %}score-bad{% endif %}">{{ m.health.score }}</span> <span class="faint">{{ m.health.weak }} weak · {{ m.health.reused }} reused{% if m.health.breached %} · </span><span class="score-bad">{{ m.health.breached }} breached</span><span class="faint">{% endif %}</span>{% if m.email_breaches %} <span class="pill" style="background:rgba(217,83,79,.25);color:#ffb3b1" title="{{ m.email_breaches|join:', ' }}">email in {{ m.email_breaches|length }} breach{{ m.email_breaches|length|pluralize:"es" }}</span>{% endif %}{% else %}<span class="faint">not reported</span>{% endif %}</td>
       <td>{{ m.active_devices }}</td>
       <td>{% if m.health %}{% if m.health.has_recovery_key %}yes{% else %}<span class="score-ok">no</span>{% endif %}{% else %}<span class="faint">–</span>{% endif %}</td>
       <td style="white-space:nowrap">
@@ -82,6 +82,7 @@
       <p><label><input type="checkbox" name="allow_export" {% if policy.allow_export %}checked{% endif %}> Allow exporting vault contents</label></p>
       <p><label><input type="checkbox" name="require_recovery_key" {% if policy.require_recovery_key %}checked{% endif %}> Ask members to create a recovery key</label></p>
       <p><label><input type="checkbox" name="allow_share_links" {% if policy.allow_share_links %}checked{% endif %}> Allow sending items with one-time share links</label></p>
+      <p><label><input type="checkbox" name="check_email_breaches" {% if policy.check_email_breaches %}checked{% endif %}> Check members' work email addresses against known data breaches{% if not hibp_configured %} <span class="faint">(not set up on this server yet)</span>{% endif %}</label></p>
       <button class="primary" type="submit">Save policy</button>
     </form>
     <p class="faint">Apps apply the strictest policy of every organization a person belongs to.</p>

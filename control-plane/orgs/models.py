@@ -112,6 +112,9 @@ class OrgPolicy(models.Model):
     require_recovery_key = models.BooleanField(default=False)
     # Members may send items with one-time share links.
     allow_share_links = models.BooleanField(default=True)
+    # Check members' work email addresses against known data breaches
+    # (Have I Been Pwned; needs CLAVIUM_HIBP_API_KEY on the server).
+    check_email_breaches = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(Account, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
 
@@ -130,6 +133,7 @@ class OrgPolicy(models.Model):
             "allow_export": self.allow_export,
             "require_recovery_key": self.require_recovery_key,
             "allow_share_links": self.allow_share_links,
+            "check_email_breaches": self.check_email_breaches,
         }
 
     @classmethod
@@ -163,6 +167,8 @@ class HealthSnapshot(models.Model):
     reused = models.PositiveIntegerField()
     old = models.PositiveIntegerField()
     without_totp = models.PositiveIntegerField()
+    # Passwords found in known breaches at the app's last check.
+    breached = models.PositiveIntegerField(default=0)
     has_recovery_key = models.BooleanField(default=False)
     reported_at = models.DateTimeField(auto_now=True)
 

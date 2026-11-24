@@ -75,6 +75,21 @@ class ApiClient {
     return null;
   }
 
+  /// Have I Been Pwned range for a 5-character SHA-1 prefix (free, no key,
+  /// k-anonymity: the full hash never leaves the device). Padded so the
+  /// response size does not hint at the result.
+  Future<String> pwnedRange(String prefix) async {
+    final req = http.Request('GET', Uri.parse('https://api.pwnedpasswords.com/range/$prefix'))..headers['Add-Padding'] = 'true';
+    http.Response res;
+    try {
+      res = await http.Response.fromStream(await _http.send(req).timeout(const Duration(seconds: 20)));
+    } catch (_) {
+      throw ApiException(0, 'Could not reach the breach service. Check your connection.');
+    }
+    if (res.statusCode != 200) throw ApiException(res.statusCode, 'The breach service answered ${res.statusCode}. Try again later.');
+    return res.body;
+  }
+
   /// Any signed-in call (team vaults).
   Future<dynamic> call(AccountSession s, String method, String path, {Object? body}) =>
       _send(method, s.server, path, token: s.token, body: body);

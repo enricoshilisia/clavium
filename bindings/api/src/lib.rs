@@ -34,6 +34,8 @@ pub struct Session {
     /// Weak KDF parameters for automated tests only.
     fast_kdf: bool,
     teams: teams::Teams,
+    /// Record id -> times seen in breaches, from the last breach check.
+    breached: BTreeMap<Uuid, u64>,
 }
 
 #[derive(Deserialize)]
@@ -257,6 +259,7 @@ impl Session {
             "lock" => {
                 self.vault = None;
                 self.teams.lock();
+                self.breached.clear();
                 Ok(Value::Null)
             }
             "is_unlocked" => Ok(json!(self.vault.is_some())),
@@ -369,7 +372,14 @@ impl Session {
             "health" => {
                 let v = self.vault()?;
                 let records = v.list_records();
-                Ok(serde_json::to_value(analyze_health(records.iter())).unwrap())
+                let mut out = serde_json::to_value(analyze_health(records.iter())).unwrap();
+                // From the last breach check, for records that still exist.
+                let breached: Vec<Value> = records
+                    .iter()
+                    .filter_map(|r| self.breached.get(&r.id).map(|n| json!({ "id": r.id, "count": n })))
+                    .collect();
+                out["breached"] = json!(breached);
+                Ok(out)
             }
 
             // ---- tools ----
@@ -503,6 +513,29 @@ impl Session {
             "link_cancel" => {
                 self.link = None;
                 Ok(Value::Null)
+            }
+
+            // ---- breached passwords (Have I Been Pwned, k-anonymity) ----
+            "breach_prefixes" => {
+                let mut recs = self.vault()?.list_records();
+                recs.extend(self.teams.all_records().into_iter().map(|(_, r)| r));
+                Ok(json!({ "prefixes": clavium_security_core::breach::prefixes(&recs) }))
+            }
+            "breach_apply" => {
+                // ranges: {"ABCDE": "<body of /range/ABCDE>", ...}
+                let ranges: BTreeMap<String, String> = arg(a, "ranges")?;
+                let personal = self.vault()?.list_records();
+                let mut out: Vec<Value> = clavium_security_core::breach::find(&personal, &ranges)
+                    .into_iter()
+                    .map(|h| json!({ "id": h.id, "title": h.title, "count": h.count, "team_id": null }))
+                    .collect();
+                self.breached = out.iter().filter_map(|h| Some((serde_json::from_value(h["id"].clone()).ok()?, h["count"].as_u64()?))).collect();
+                for (team, r) in self.teams.all_records() {
+                    for h in clavium_security_core::breach::find(std::slice::from_ref(&r), &ranges) {
+                        out.push(json!({ "id": h.id, "title": h.title, "count": h.count, "team_id": team }));
+                    }
+                }
+                Ok(json!({ "breached": out, "checked": ranges.len() }))
             }
 
             // ---- phishing guard ----

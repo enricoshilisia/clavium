@@ -49,6 +49,8 @@ pub fn run() {
             teams::team_invoke,
             guard::check_link,
             guard::share_create,
+            guard::breach_prefixes,
+            guard::breach_apply,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

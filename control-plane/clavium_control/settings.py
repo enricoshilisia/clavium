@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     "entra",
     "teams",
     "shares",
+    "breaches",
 ]
 
 MIDDLEWARE = [
@@ -189,3 +190,9 @@ CLAVIUM_MS_CLIENT_ID = os.environ.get("CLAVIUM_MS_CLIENT_ID", "")
 CLAVIUM_MS_CLIENT_SECRET = os.environ.get("CLAVIUM_MS_CLIENT_SECRET", "")
 CLAVIUM_MS_AUTHORITY = os.environ.get("CLAVIUM_MS_AUTHORITY", "https://login.microsoftonline.com").rstrip("/")
 CLAVIUM_MS_GRAPH = os.environ.get("CLAVIUM_MS_GRAPH", "https://graph.microsoft.com").rstrip("/")
+
+# Email breach checks (Have I Been Pwned, paid key). Without a key the
+# feature is hidden; password breach checks run in the apps and need none.
+CLAVIUM_HIBP_API_KEY = os.environ.get("CLAVIUM_HIBP_API_KEY", "")
+# Requests per minute the key allows (10 on the smallest plan).
+CLAVIUM_HIBP_RPM = int(os.environ.get("CLAVIUM_HIBP_RPM", "10"))

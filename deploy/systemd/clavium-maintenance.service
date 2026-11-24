@@ -1,0 +1,12 @@
+[Unit]
+Description=Clavium hourly maintenance (expired share links, email breach checks)
+After=network-online.target clavium-control.service
+
+[Service]
+Type=oneshot
+User=enrico
+WorkingDirectory=/home/enrico/clavium/control-plane
+EnvironmentFile=/home/enrico/clavium/control-plane/.env
+ExecStart=/home/enrico/clavium/control-plane/.venv/bin/python manage.py shares_cleanup
+ExecStart=/home/enrico/clavium/control-plane/.venv/bin/python manage.py breach_emails
+TimeoutStartSec=3000

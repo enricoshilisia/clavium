@@ -57,3 +57,39 @@ pub fn share_create(
     let draft = share::create(&bytes, passphrase.as_deref()).map_err(|e| e.to_string())?;
     Ok(json!({ "draft": draft, "rounds": share::PBKDF2_ROUNDS }))
 }
+
+// ---- breached passwords (k-anonymity: only 5-character hash prefixes leave) ----
+
+fn all_records(state: &AppState) -> (Vec<clavium_security_core::Record>, Vec<(Uuid, clavium_security_core::Record)>) {
+    let personal = state
+        .session
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|s| s.vault.list_records()))
+        .unwrap_or_default();
+    let teams = state.teams.lock().map(|t| t.all_records()).unwrap_or_default();
+    (personal, teams)
+}
+
+#[tauri::command]
+pub fn breach_prefixes(state: State<AppState>) -> Vec<String> {
+    let (mut recs, teams) = all_records(&state);
+    recs.extend(teams.into_iter().map(|(_, r)| r));
+    clavium_security_core::breach::prefixes(&recs)
+}
+
+#[tauri::command]
+pub fn breach_apply(state: State<AppState>, ranges: std::collections::BTreeMap<String, String>) -> Vec<Value> {
+    use clavium_security_core::breach::find;
+    let (personal, teams) = all_records(&state);
+    let mut out: Vec<Value> = find(&personal, &ranges)
+        .into_iter()
+        .map(|h| json!({ "id": h.id, "title": h.title, "count": h.count, "team_id": null }))
+        .collect();
+    for (team, r) in teams {
+        for h in find(std::slice::from_ref(&r), &ranges) {
+            out.push(json!({ "id": h.id, "title": h.title, "count": h.count, "team_id": team }));
+        }
+    }
+    out
+}

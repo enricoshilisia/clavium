@@ -100,8 +100,14 @@ def org_dashboard(request, org_id):
         .order_by("account__email")
     )
     health = {h.account_id: h for h in HealthSnapshot.objects.filter(account__in=[m.account for m in members])}
+    from breaches.hibp import configured as hibp_configured
+    from breaches.models import EmailBreachStatus
+
+    email_breaches = {b.account_id: b for b in EmailBreachStatus.objects.filter(account__in=[m.account for m in members])}
     for m in members:
         m.health = health.get(m.account_id)
+        b = email_breaches.get(m.account_id)
+        m.email_breaches = [x["title"] for x in b.breaches] if b else []
         m.pending_invite = not m.account.has_usable_password()
     account_ids = [m.account_id for m in members]
     devices = Device.objects.filter(account_id__in=account_ids, revoked_at__isnull=True).select_related("account").order_by("-last_seen_at")
@@ -124,6 +130,7 @@ def org_dashboard(request, org_id):
         "new_secret": request.session.pop("console_secret", None),
         "ms": entra_console_context(request, org),
         "team_vaults": _team_vaults(org),
+        "hibp_configured": hibp_configured(),
     }
     return render(request, "console/org.html", ctx)
 
@@ -262,6 +269,7 @@ def org_action(request, org_id):
         p.allow_export = request.POST.get("allow_export") == "on"
         p.require_recovery_key = request.POST.get("require_recovery_key") == "on"
         p.allow_share_links = request.POST.get("allow_share_links") == "on"
+        p.check_email_breaches = request.POST.get("check_email_breaches") == "on"
         p.updated_by = request.user
         p.save()
         AuditLogEntry.record(organization=org, actor=request.user, action="policy.updated", obj=p, **p.as_dict())

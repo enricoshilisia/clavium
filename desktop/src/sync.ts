@@ -1,5 +1,6 @@
 // Desktop sync: the same protocol as the mobile app. The browser side only
 // moves ciphertext; Rust (via Tauri) decrypts, merges and decides.
+import { breachedPersonalCount } from "./breach";
 import { getKeyring, getPolicy, pullItems, pushItems, putKeyring, reportHealth, type AccountSession, type Policy } from "./account";
 import { syncApplyPull, syncKeyringHeader, syncMarkPushed, syncState, vaultHealth } from "./api";
 import type { EncryptedItem } from "./types";
@@ -131,6 +132,7 @@ export async function afterSync(session: AccountSession, hasRecoveryKey: boolean
         reused: h.reused.reduce((n, g) => n + g.length, 0),
         old: h.old.length,
         without_totp: h.without_totp.length,
+        breached: breachedPersonalCount(),
         has_recovery_key: hasRecoveryKey,
       });
       lastHealthReport = Date.now();

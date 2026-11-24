@@ -166,6 +166,15 @@ class RecordDetailScreen extends StatelessWidget {
                 FieldTile(label: 'Username', value: r.username),
               if (r.password.isNotEmpty)
                 FieldTile(label: 'Password', value: r.password, secret: true),
+              if (app.breachFor(r.id) != null)
+                Padding(
+                  key: const Key('breach-notice'),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Text(
+                    'This password appears ${app.breachFor(r.id)!['count']} times in leaked password lists. Attackers try these first: change it.',
+                    style: const TextStyle(color: ClvColors.danger),
+                  ),
+                ),
               if (r.totpSecret != null)
                 ListTile(
                   title: const Text(
