@@ -122,8 +122,15 @@ def org_dashboard(request, org_id):
         "roles": Membership.Role.choices,
         "scim_base": request.build_absolute_uri("/scim/v2/"),
         "new_secret": request.session.pop("console_secret", None),
+        "ms": entra_console_context(request, org),
     }
     return render(request, "console/org.html", ctx)
+
+
+def entra_console_context(request, org):
+    from entra.views import console_context  # entra imports this module
+
+    return console_context(request, org)
 
 
 @login_required(login_url=LOGIN_URL)

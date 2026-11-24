@@ -1,0 +1,86 @@
+<div class="card" id="microsoft">
+  <h2>Microsoft 365</h2>
+  {% if not ms.configured %}
+    <p class="faint">Microsoft 365 directory sync is not set up on this Clavium server yet.</p>
+  {% elif not ms.conn %}
+    <p class="sub">Connect your Microsoft 365 (Entra ID) directory and Clavium follows it: people in the groups you choose get an invite, and anyone disabled or removed in Microsoft 365 loses access and is signed out everywhere.</p>
+    <p class="faint">You need a Global Administrator. Clavium asks only to <strong>read</strong> users and group membership. It never changes your directory and never sees anyone's vault.</p>
+    <form method="post" action="{% url 'entra-connect' org.id %}">{% csrf_token %}
+      <button class="primary" type="submit">Connect Microsoft 365</button>
+    </form>
+  {% else %}
+    {% with c=ms.conn %}
+    <p>
+      {% if c.status == "active" %}<span class="pill" style="background:rgba(63,174,107,.25);color:#9be3b6">Syncing</span>
+      {% elif c.status == "held" %}<span class="pill gold">Removals waiting for approval</span>
+      {% elif c.status == "error" %}<span class="pill" style="background:rgba(217,83,79,.25);color:#ffb3b1">Problem</span>
+      {% elif c.status == "paused" %}<span class="pill">Paused</span>
+      {% else %}<span class="pill gold">Choose groups</span>{% endif %}
+      <span class="faint">Tenant <code class="mono">{{ c.tenant_id }}</code> · {{ ms.synced_members }} synced member{{ ms.synced_members|pluralize }}
+      {% if c.last_sync_at %} · last sync {{ c.last_sync_at|timesince }} ago{% endif %}</span>
+    </p>
+    {% if c.last_error %}<div class="msg error">{{ c.last_error }}</div>{% endif %}
+
+    {% if c.held_removals %}
+    <div class="secret">
+      <strong>{{ c.held_removals|length }} people would be removed</strong><br>
+      <span class="faint">That is more than usual for one sync, so nothing was removed. Check that the right groups are chosen. If this is expected (for example, a team left), approve it.</span>
+      <ul>{% for r in c.held_removals|slice:":15" %}<li>{{ r.email }} <span class="faint">{{ r.reason }}</span></li>{% endfor %}{% if c.held_removals|length > 15 %}<li class="faint">and {{ c.held_removals|length|add:"-15" }} more</li>{% endif %}</ul>
+      <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}
+        <input type="hidden" name="action" value="approve_removals"><button class="danger" type="submit">Approve and remove them</button>
+      </form>
+    </div>
+    {% elif c.last_result.not_in_directory %}
+    <p class="faint">Not in your chosen groups any more (automatic removal is off): {% for r in c.last_result.not_in_directory|slice:":10" %}{{ r.email }}{% if not forloop.last %}, {% endif %}{% endfor %}. Remove them from the member list above if they should go.</p>
+    {% endif %}
+
+    <h3 style="font-size:14px;margin:14px 0 6px">Groups that get Clavium</h3>
+    <table>
+      {% for g in c.groups %}<tr><td>{{ g.name }}</td><td style="text-align:right">
+        <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="remove_group"><input type="hidden" name="group_id" value="{{ g.id }}"><button class="danger" type="submit">Remove</button></form>
+        {% if c.admin_group_id != g.id %}<form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="set_admin_group"><input type="hidden" name="group_id" value="{{ g.id }}"><button type="submit">Make admins group</button></form>{% endif %}
+      </td></tr>
+      {% empty %}<tr><td class="faint">None yet. Search below and add at least one group.</td></tr>{% endfor %}
+    </table>
+    <p class="faint" style="margin-top:8px">Admins group:
+      {% if c.admin_group_id %}<strong>{{ c.admin_group_name }}</strong> (its members are Clavium admins; owners never change)
+        <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="clear_admin_group"><button type="submit">Clear</button></form>
+      {% else %}none, roles are set by hand here{% endif %}
+    </p>
+
+    <form class="inline" method="get" action="#microsoft" style="margin-top:6px">
+      <input name="ms_q" style="min-width:min(260px,60vw)" placeholder="Search Microsoft 365 groups" value="{{ ms.q|default_if_none:'' }}"><button type="submit">Search</button>
+    </form>
+    {% if ms.error %}<div class="msg error" style="margin-top:8px">{{ ms.error }}</div>{% endif %}
+    {% if ms.results is not None %}
+      <table style="margin-top:8px">
+        {% for g in ms.results %}<tr><td>{{ g.name }}{% if g.description %}<br><span class="faint">{{ g.description|truncatechars:90 }}</span>{% endif %}</td>
+          <td style="text-align:right">
+            <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="add_group"><input type="hidden" name="group_id" value="{{ g.id }}"><button class="primary" type="submit">Add</button></form>
+            <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="set_admin_group"><input type="hidden" name="group_id" value="{{ g.id }}"><button type="submit">Use as admins group</button></form>
+          </td></tr>
+        {% empty %}<tr><td class="faint">No groups match.</td></tr>{% endfor %}
+      </table>
+    {% endif %}
+
+    <form method="post" action="{% url 'entra-action' org.id %}" style="margin-top:14px">{% csrf_token %}
+      <input type="hidden" name="action" value="settings">
+      <p><label><input type="checkbox" name="auto_remove" {% if c.auto_remove %}checked{% endif %}> Remove people from Clavium when they leave these groups or are disabled</label></p>
+      <p><label><input type="checkbox" name="send_invites" {% if c.send_invites %}checked{% endif %}> Email an invite to people the sync adds</label></p>
+      <p><label><input type="checkbox" name="include_guests" {% if c.include_guests %}checked{% endif %}> Include guest accounts</label></p>
+      <button type="submit">Save settings</button>
+    </form>
+
+    <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+      <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="sync"><button class="primary" type="submit" {% if not c.groups %}disabled{% endif %}>Sync now</button></form>
+      {% if c.status == "paused" %}
+      <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="resume"><button type="submit">Resume automatic sync</button></form>
+      {% else %}
+      <form class="inline" method="post" action="{% url 'entra-action' org.id %}">{% csrf_token %}<input type="hidden" name="action" value="pause"><button type="submit">Pause</button></form>
+      {% endif %}
+      <form class="inline" method="post" action="{% url 'entra-action' org.id %}" onsubmit="return confirm('Disconnect Microsoft 365? Members stay, but nobody is added or removed automatically any more.')">{% csrf_token %}<input type="hidden" name="action" value="disconnect"><button class="danger" type="submit">Disconnect</button></form>
+    </div>
+    <p class="faint" style="margin-top:8px">Clavium checks your groups every 15 minutes. Removing someone signs them out of every device and revokes their shared-vault access.</p>
+    {% endwith %}
+  {% endif %}
+</div>

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "scim",
     "console",
     "link",
+    "entra",
 ]
 
 MIDDLEWARE = [
@@ -176,3 +177,11 @@ EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "true").lower() == "true"
 EMAIL_USE_SSL = os.environ.get("EMAIL_USE_SSL", "false").lower() == "true"
 EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "15"))
 DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Clavium <no-reply@clavium.local>")
+
+# Microsoft 365 directory sync. A multi-tenant Entra app registration with
+# application permissions User.Read.All and GroupMember.Read.All. See
+# docs/microsoft-365.md. Without these the console hides the feature.
+CLAVIUM_MS_CLIENT_ID = os.environ.get("CLAVIUM_MS_CLIENT_ID", "")
+CLAVIUM_MS_CLIENT_SECRET = os.environ.get("CLAVIUM_MS_CLIENT_SECRET", "")
+CLAVIUM_MS_AUTHORITY = os.environ.get("CLAVIUM_MS_AUTHORITY", "https://login.microsoftonline.com").rstrip("/")
+CLAVIUM_MS_GRAPH = os.environ.get("CLAVIUM_MS_GRAPH", "https://graph.microsoft.com").rstrip("/")

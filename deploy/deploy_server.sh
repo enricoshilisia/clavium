@@ -23,6 +23,19 @@ if ! grep -q "worker-class gthread" "$unit"; then
   sudo systemctl daemon-reload
 fi
 sudo systemctl restart clavium-control
+
+# Microsoft 365 directory sync every 15 minutes. Harmless until the
+# CLAVIUM_MS_* settings exist: the job just says it is not configured.
+for f in clavium-entra-sync.service clavium-entra-sync.timer; do
+  if ! cmp -s "../deploy/systemd/$f" "/etc/systemd/system/$f"; then
+    sudo install -m 644 "../deploy/systemd/$f" "/etc/systemd/system/$f"
+    timer_changed=1
+  fi
+done
+if [ "${timer_changed:-0}" = 1 ]; then
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now clavium-entra-sync.timer
+fi
 sleep 3
 systemctl is-active clavium-control
 curl -fsS https://clavium-api.172-169-233-189.sslip.io/api/health/ && echo

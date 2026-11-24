@@ -21,7 +21,7 @@
     <tr><th>Email</th><th>Role</th><th>Health</th><th>Devices</th><th>Recovery key</th><th></th></tr>
     {% for m in members %}
     <tr>
-      <td>{{ m.account.email }} {% if m.scim_managed %}<span class="pill">SCIM</span>{% endif %} {% if m.pending_invite %}<span class="pill gold">invite pending</span>{% endif %}</td>
+      <td>{{ m.account.email }} {% if m.scim_managed %}<span class="pill">SCIM</span>{% endif %}{% if m.entra_managed %}<span class="pill">Microsoft 365</span>{% endif %} {% if m.pending_invite %}<span class="pill gold">invite pending</span>{% endif %}</td>
       <td>
         <form class="inline" method="post" action="{% url 'console-action' org.id %}">{% csrf_token %}
           <input type="hidden" name="action" value="change_role"><input type="hidden" name="membership_id" value="{{ m.id }}">
@@ -49,6 +49,8 @@
   <p class="faint">New people get an invite link to set their account password. Their vault and master password stay theirs alone.</p>
 </div>
 
+{% include "entra/card.html" %}
+
 <div class="grid2">
   <div class="card">
     <h2>Policy</h2>
@@ -66,7 +68,7 @@
   </div>
   <div class="card">
     <h2>Provisioning (SCIM 2.0)</h2>
-    <p class="sub">Connect Microsoft Entra ID, Okta or Google to add and remove members automatically. Removing someone in your directory signs them out of every device and revokes their shared vault access.</p>
+    <p class="sub">For Okta, Google Workspace or other identity providers (Microsoft 365 is easier with the card above). Connect your directory to add and remove members automatically. Removing someone in your directory signs them out of every device and revokes their shared vault access.</p>
     <p>Tenant URL <code class="mono">{{ scim_base }}</code></p>
     <table>
       {% for t in scim_tokens %}<tr><td>{{ t.label }}</td><td class="faint">created {{ t.created_at|date:"Y-m-d" }}{% if t.last_used_at %}, used {{ t.last_used_at|timesince }} ago{% endif %}</td>

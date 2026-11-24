@@ -1,0 +1,14 @@
+{% autoescape off %}Hello{% if name %} {{ name }}{% endif %},
+
+{{ org }} uses Clavium to keep work passwords and 2FA codes safe, and has added you.
+
+Set up your account here (the link works once, for 7 days):
+
+{{ link }}
+
+Then install Clavium on your computer or phone and sign in with your work email.
+
+Your vault is locked with a master password that only you know. Neither {{ org }} nor Clavium can read what you store in it.
+
+If you were not expecting this, you can ignore this email.
+{% endautoescape %}

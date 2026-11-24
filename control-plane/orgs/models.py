@@ -33,6 +33,9 @@ class Membership(models.Model):
     # Set when an identity provider manages this member over SCIM.
     external_id = models.CharField(max_length=255, blank=True)
     scim_managed = models.BooleanField(default=False)
+    # Added and removed by Microsoft 365 directory sync (external_id is
+    # then the Entra object id).
+    entra_managed = models.BooleanField(default=False)
 
     class Meta:
         constraints = [
