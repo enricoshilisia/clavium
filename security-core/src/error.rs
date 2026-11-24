@@ -50,6 +50,12 @@ pub enum VaultError {
 
     #[error("encrypted item belongs to a different record or vault")]
     ItemMismatch,
+
+    #[error("this team vault key could not be opened (it was made for another account, team or key version)")]
+    TeamKeyInvalid,
+
+    #[error("the server offered a different key for account {0} than before; compare fingerprints before sharing")]
+    TeamKeyChanged(String),
 }
 
 pub type Result<T> = std::result::Result<T, VaultError>;

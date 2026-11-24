@@ -12,6 +12,7 @@ urlpatterns = [
     path("verify-email/", verify_email_page, name="verify-email"),
     path("api/accounts/", include("accounts.urls")),
     path("api/vaults/", include("vaults.urls")),
+    path("api/teams/", include("teams.urls")),
     path("api/sync/", include("sync.urls")),
     path("scim/v2/", include("scim.urls")),
     path("api/entra/notify/", entra_notify, name="entra-notify"),

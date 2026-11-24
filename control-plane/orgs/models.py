@@ -36,6 +36,9 @@ class Membership(models.Model):
     # Added and removed by Microsoft 365 directory sync (external_id is
     # then the Entra object id).
     entra_managed = models.BooleanField(default=False)
+    # Microsoft 365 group ids this person is in (of the groups Clavium
+    # reads), recorded by directory sync for team vault group rules.
+    entra_groups = models.JSONField(default=list, blank=True)
 
     class Meta:
         constraints = [

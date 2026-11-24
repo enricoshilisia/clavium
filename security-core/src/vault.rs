@@ -106,6 +106,9 @@ pub struct Vault {
     /// Present for v3 vaults (and v1 vaults opened with [`Vault::open`],
     /// which upgrade on their next [`Vault::save`]).
     pub(crate) keyring: Option<Keyring>,
+    /// Team vaults: account id -> public key first seen for it (trust on
+    /// first use, see `team.rs`). Personal vaults only.
+    pub(crate) known_keys: BTreeMap<String, String>,
 }
 
 /// The encrypted body of a v3 vault file.
@@ -118,6 +121,8 @@ struct VaultPayload {
     folders: Vec<String>,
     #[serde(default)]
     sync_cursor: u64,
+    #[serde(default)]
+    known_keys: BTreeMap<String, String>,
 }
 
 impl Vault {
@@ -130,6 +135,7 @@ impl Vault {
             folders: Vec::new(),
             sync_cursor: 0,
             keyring: None,
+            known_keys: BTreeMap::new(),
         }
     }
 
@@ -394,6 +400,11 @@ impl Vault {
         Ok(bytes[4])
     }
 
+    /// Open a v3 file with an already-unlocked keyring (team vault caches).
+    pub(crate) fn open_with_keyring(file_bytes: &[u8], ring: Keyring) -> Result<Self> {
+        Self::decrypt_v3(file_bytes, ring)
+    }
+
     fn decrypt_v3(file_bytes: &[u8], ring: Keyring) -> Result<Self> {
         let (_, body) = parse_v3(file_bytes)?;
         let plaintext = Zeroizing::new(
@@ -408,6 +419,7 @@ impl Vault {
             folders: payload.folders,
             sync_cursor: payload.sync_cursor,
             keyring: Some(ring),
+            known_keys: payload.known_keys,
         })
     }
 
@@ -427,6 +439,7 @@ impl Vault {
             learned_categories: self.learned_categories.clone(),
             folders: self.folders.clone(),
             sync_cursor: self.sync_cursor,
+            known_keys: self.known_keys.clone(),
         })?);
         let (ciphertext, nonce) = encrypt_with_aad(ring.key(), &payload, &aad)?;
         file.extend_from_slice(&nonce);

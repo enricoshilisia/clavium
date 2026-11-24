@@ -177,6 +177,22 @@ class SyncTests(TestCase):
         self.assertTrue(Account.objects.get(email="user1@contoso.com").is_active)
         self.assertEqual(len(mail.outbox), 3)
 
+    def test_team_vault_group_rule_follows_the_directory(self):
+        import uuid as _uuid
+
+        from teams.models import TeamAccess, TeamGroupRule, TeamVault
+
+        team = TeamVault.objects.create(id=_uuid.uuid4(), organization=self.org, name="Finance")
+        # The rule's group is not one of the "Clavium" groups; sync reads it anyway.
+        TeamGroupRule.objects.create(team=team, group_id="finance", group_name="Finance", role="editor")
+        r = self.run_sync({"staff": [user(1), user(2)], "finance": [user(2)]})
+        self.assertEqual(r["team_access"]["added"], 1)
+        self.assertEqual(list(TeamAccess.objects.filter(team=team).values_list("account__email", "source")), [("user2@contoso.com", "group")])
+        self.assertEqual(Membership.objects.get(account__email="user2@contoso.com").entra_groups, ["finance", "staff"])
+        r = self.run_sync({"staff": [user(1), user(2)], "finance": []})
+        self.assertEqual(r["team_access"]["removed"], 1)
+        self.assertFalse(TeamAccess.objects.filter(team=team).exists())
+
     def test_paused_is_skipped_by_the_timer(self):
         self.conn.status = DirectoryConnection.Status.PAUSED
         self.conn.save()

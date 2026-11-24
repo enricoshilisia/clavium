@@ -33,6 +33,9 @@ def offboard(org, membership, actor, *, revoke_devices=False, source="console"):
     # admin client to open these vaults rotates their key.
     SharedVault.objects.filter(id__in=vault_ids).update(needs_rotation=True)
 
+    from teams.services import offboard_account as remove_team_access
+
+    team_accesses = remove_team_access(org, membership.account, actor, source)
     devices = revoke_all_devices(membership.account) if revoke_devices else 0
     membership.removed_at = timezone.now()
     membership.save(update_fields=["removed_at"])
@@ -44,6 +47,7 @@ def offboard(org, membership, actor, *, revoke_devices=False, source="console"):
         member_email=membership.account.email,
         shared_vault_grants_revoked=grant_count,
         devices_revoked=devices,
+        team_vaults_left=team_accesses,
         source=source,
     )
     return {"shared_vault_grants_revoked": grant_count, "devices_revoked": devices, "vaults_needing_rotation": len(vault_ids)}

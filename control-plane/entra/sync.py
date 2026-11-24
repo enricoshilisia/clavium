@@ -54,11 +54,22 @@ def run(conn: DirectoryConnection, *, actor=None, approve_removals=False, reques
     # 1. Read Microsoft first, change nothing until every read succeeded.
     try:
         client = client or graph.client_for(conn.tenant_id)
+        from teams.services import rule_group_ids
+
         directory = {}
+        user_groups = {}
         for g in conn.groups:
             for u in client.group_users(g["id"]):
                 directory[u["id"]] = u
+                user_groups.setdefault(u["id"], set()).add(g["id"])
         admin_ids = {u["id"] for u in client.group_users(conn.admin_group_id)} if conn.admin_group_id else None
+        if admin_ids:
+            for eid in admin_ids:
+                user_groups.setdefault(eid, set()).add(conn.admin_group_id)
+        # Groups used by team vault rules, which may not be "Clavium" groups.
+        for gid in rule_group_ids(org) - set(conn.group_ids()) - {conn.admin_group_id}:
+            for u in client.group_users(gid):
+                user_groups.setdefault(u["id"], set()).add(gid)
     except graph.GraphError as e:
         conn.status = Status.ERROR
         conn.last_error = str(e)
@@ -134,6 +145,10 @@ def run(conn: DirectoryConnection, *, actor=None, approve_removals=False, reques
                 m.save(update_fields=["role"])
                 (out["promoted"] if target_role == Membership.Role.ADMIN else out["demoted"]).append(u["email"])
                 _audit(org, actor, "member.role_changed", m, member_email=u["email"], old=old, new=target_role)
+            groups_now = sorted(user_groups.get(eid, set()))
+            if (m.entra_groups or []) != groups_now:
+                m.entra_groups = groups_now
+                m.save(update_fields=["entra_groups"])
             if needs_invite and not m.account.has_usable_password():
                 _, raw = Invite.issue(org, m.account)
                 if conn.send_invites and send_invite(org, m.account, raw, base):
@@ -161,6 +176,9 @@ def run(conn: DirectoryConnection, *, actor=None, approve_removals=False, reques
                     m.account.save(update_fields=["is_active"])
                 out["removed"].append(m.account.email)
 
+        from teams.services import apply_group_rules
+
+        out["team_access"] = apply_group_rules(org, actor)
         changes = sum(len(out[k]) for k in ("added", "linked", "reactivated", "promoted", "demoted", "removed"))
         summary = {k: _short(v) if isinstance(v, list) else v for k, v in out.items()}
         summary["in_directory"] = len(wanted)

@@ -15,6 +15,7 @@ pub mod link;
 pub mod otp;
 pub mod record;
 pub mod sync;
+pub mod team;
 pub mod vault;
 
 pub use error::{Result, VaultError};
@@ -31,4 +32,5 @@ pub use keyring::{generate_recovery_key, KeySlot, Keyring, KeyringHeader, SlotKi
 pub use link::{seal_for_link, verification_code, LinkEnvelope, LinkRequest};
 pub use record::{CategorySource, CustomField, Record, RecordKind};
 pub use sync::{EncryptedItem, MergeReport};
+pub use team::{fingerprint, new_team_key, wrap_team_key, AccountKeys, StoredAccountKey, WrappedTeamKey};
 pub use vault::Vault;

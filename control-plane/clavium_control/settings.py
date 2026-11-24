@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "console",
     "link",
     "entra",
+    "teams",
 ]
 
 MIDDLEWARE = [
