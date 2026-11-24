@@ -32,6 +32,7 @@ export const KIND_BADGE: Record<RecordKind, string> = {
 };
 
 const SPECIAL: Record<string, string> = {
+  android_apps: "Used in Android apps",
   swift_bic: "SWIFT / BIC",
   iban: "IBAN",
   cvv: "CVV",

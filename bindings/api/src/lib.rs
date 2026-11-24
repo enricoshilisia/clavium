@@ -515,6 +515,66 @@ impl Session {
                 Ok(Value::Null)
             }
 
+            // ---- autofill (Android) ----
+            "autofill_candidates" => {
+                use clavium_security_core::autofill;
+                let domain: Option<String> = opt_arg(a, "web_domain")?;
+                let package: Option<String> = opt_arg(a, "package")?;
+                let mut all: Vec<(Option<Uuid>, Record)> = self.vault()?.list_records().into_iter().map(|r| (None, r)).collect();
+                all.extend(self.teams.all_records().into_iter().map(|(t, r)| (Some(t), r)));
+                all.retain(|(_, r)| !r.password.is_empty() || !r.username.is_empty());
+                let row = |(t, r): &(Option<Uuid>, Record), reason: &str| {
+                    json!({ "id": r.id, "team_id": t, "title": r.title, "username": r.username, "url": r.url, "reason": reason })
+                };
+                let mut matches = vec![];
+                let mut suggestions = vec![];
+                let mut verdict = Value::Null;
+                if let Some(d) = domain.as_deref().filter(|d| !d.is_empty()) {
+                    let saved: Vec<String> = all.iter().map(|(_, r)| r.url.clone()).filter(|u| !u.is_empty()).collect();
+                    verdict = serde_json::to_value(clavium_security_core::assess_link(d, &saved)).unwrap();
+                    for x in &all {
+                        if autofill::fits_domain(&x.1.url, d) {
+                            matches.push(row(x, "website"));
+                        }
+                    }
+                } else if let Some(p) = package.as_deref().filter(|p| !p.is_empty()) {
+                    for x in &all {
+                        if autofill::fits_app(&x.1, p) {
+                            matches.push(row(x, "used in this app"));
+                        } else if autofill::suggests_app(&x.1, p) {
+                            suggestions.push(row(x, "name looks related"));
+                        }
+                    }
+                }
+                let mut others: Vec<&(Option<Uuid>, Record)> = all.iter().collect();
+                others.sort_by(|x, y| x.1.title.to_lowercase().cmp(&y.1.title.to_lowercase()));
+                Ok(json!({
+                    "matches": matches,
+                    "suggestions": suggestions,
+                    "all": others.into_iter().map(|x| row(x, "")).collect::<Vec<_>>(),
+                    "verdict": verdict,
+                }))
+            }
+            "autofill_get" => {
+                let id = id_arg(a)?;
+                let team: Option<Uuid> = opt_arg(a, "team_id")?;
+                let r = match team {
+                    Some(t) => self.teams.record(t, id).ok_or("no such record")?,
+                    None => self.vault()?.get_record(id).cloned().ok_or("no such record")?,
+                };
+                Ok(json!({ "username": r.username, "password": r.password }))
+            }
+            "autofill_remember" => {
+                let id = id_arg(a)?;
+                let package: String = arg(a, "package")?;
+                let v = self.vault_mut()?;
+                let mut r = v.get_record(id).cloned().ok_or("no such record")?;
+                if clavium_security_core::autofill::remember_app(&mut r, &package) {
+                    v.update_record(id, r).map_err(|e| e.to_string())?;
+                }
+                Ok(json!({ "saved": self.saved()? }))
+            }
+
             // ---- breached passwords (Have I Been Pwned, k-anonymity) ----
             "breach_prefixes" => {
                 let mut recs = self.vault()?.list_records();

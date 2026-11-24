@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'core/api_client.dart';
 import 'core/app_state.dart';
 import 'core/storage.dart';
+import 'ui/autofill_screen.dart';
 import 'ui/home_screen.dart';
 import 'ui/onboarding_screen.dart';
 import 'ui/theme.dart';
@@ -28,6 +29,14 @@ class DeviceBiometrics implements BiometricPrompt {
       return false;
     }
   }
+}
+
+/// Entry point for Android's "Fill from Clavium" screen (AutofillActivity).
+@pragma('vm:entry-point')
+void autofillMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  final app = AppState(storage: DeviceStorage(), api: ApiClient(), biometrics: DeviceBiometrics(), liveSync: false);
+  runApp(AutofillApp(app: app));
 }
 
 void main() {

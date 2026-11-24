@@ -85,6 +85,7 @@ const kindLabels = <String, String>{
 /// Human labels for type-specific field names.
 String fieldLabel(String name) {
   const special = {
+    'android_apps': 'Used in Android apps',
     'swift_bic': 'SWIFT / BIC',
     'iban': 'IBAN',
     'cvv': 'CVV',

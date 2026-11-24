@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../core/api_client.dart';
@@ -68,6 +70,7 @@ class SettingsTab extends StatelessWidget {
             ),
           ],
           const _Header('Security'),
+        const _AutofillTile(),
           ListTile(
             key: const Key('check-link-tile'),
             leading: const Icon(Icons.travel_explore, color: ClvColors.gold500),
@@ -419,6 +422,60 @@ class _SignInScreenState extends State<SignInScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+
+/// Android only: turn Clavium on as the phone's autofill service.
+class _AutofillTile extends StatefulWidget {
+  const _AutofillTile();
+  @override
+  State<_AutofillTile> createState() => _AutofillTileState();
+}
+
+class _AutofillTileState extends State<_AutofillTile> with WidgetsBindingObserver {
+  static const _ch = MethodChannel('clavium/autofill_settings');
+  Map? status;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh(); // back from Android settings
+  }
+
+  Future<void> _refresh() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
+    try {
+      final s = await _ch.invokeMethod('status') as Map;
+      if (mounted) setState(() => status = s);
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = status;
+    if (s == null || s['supported'] != true) return const SizedBox.shrink();
+    final on = s['enabled'] == true;
+    return ListTile(
+      key: const Key('autofill-tile'),
+      leading: Icon(Icons.password, color: on ? ClvColors.success : ClvColors.gold500),
+      title: const Text('Fill passwords in other apps'),
+      subtitle: Text(on ? 'Clavium is your autofill service' : 'Tap, then choose Clavium as the autofill service'),
+      trailing: on ? const Icon(Icons.check_circle, color: ClvColors.success) : const Icon(Icons.chevron_right),
+      onTap: () => _ch.invokeMethod('open'),
     );
   }
 }

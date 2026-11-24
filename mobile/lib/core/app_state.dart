@@ -130,6 +130,15 @@ class AppState extends ChangeNotifier {
     if (saved != null) await storage.writeVault(saved);
   }
 
+  /// The autofill screen runs in the same process as the app. If the app's
+  /// vault is already unlocked in the core, use it instead of asking again.
+  bool adoptUnlockedCore() {
+    if (Core.call('is_unlocked') != true) return false;
+    phase = Phase.unlocked;
+    refresh();
+    return true;
+  }
+
   // ---------- lock / unlock ----------
 
   Future<void> createVault(String masterPassword) async {
