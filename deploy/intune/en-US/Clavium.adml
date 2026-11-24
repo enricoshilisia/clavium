@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>Clavium</displayName>
+  <description>Settings for the Clavium password manager desktop app.</description>
+  <resources>
+    <stringTable>
+      <string id="Clavium">Clavium</string>
+      <string id="SUPPORTED_ClaviumDesktop">Clavium desktop app with managed settings support</string>
+      <string id="ServerUrl">Company Clavium server</string>
+      <string id="ServerUrl_Explain">The Clavium server this computer signs in to, for example https://vault.contoso.com. Must be an https address. Leave not configured to use the standard Clavium service.
+
+People signed in to a different server are asked to sign in again.</string>
+      <string id="AllowedEmailDomains">Allowed work email domains</string>
+      <string id="AllowedEmailDomains_Explain">Only email addresses at these domains can sign in, so staff cannot connect a personal account on a company computer. Separate several domains with commas, for example: contoso.com, contoso.co.ke</string>
+      <string id="DisableAccountCreation">Do not allow creating new accounts</string>
+      <string id="DisableAccountCreation_Explain">Hides "Create account". Use this when accounts come from your IT team, for example through Microsoft 365 directory sync invites.</string>
+      <string id="RequireSignIn">Ask people to sign in to their work account</string>
+      <string id="RequireSignIn_Explain">Shows a reminder in the vault until the person signs in, so their vault is backed up and covered by your organization's policies. The vault itself stays usable.</string>
+      <string id="MaxAutoLockMinutes">Lock the vault after at most this many idle minutes</string>
+      <string id="MaxAutoLockMinutes_Explain">The vault locks itself after this many minutes without activity, or sooner if the person or another policy sets a shorter time. Between 1 and 1440.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="ServerUrl">
+        <textBox refId="ServerUrlText"><label>Server address (https://...)</label></textBox>
+      </presentation>
+      <presentation id="AllowedEmailDomains">
+        <textBox refId="AllowedEmailDomainsText"><label>Domains (comma separated)</label></textBox>
+      </presentation>
+      <presentation id="MaxAutoLockMinutes">
+        <decimalTextBox refId="MaxAutoLockMinutesValue" defaultValue="10">Minutes</decimalTextBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

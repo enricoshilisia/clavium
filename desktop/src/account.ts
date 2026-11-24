@@ -2,7 +2,8 @@
 // Everything sent to the control plane is either account credentials or
 // ciphertext produced by the Rust core.
 
-import { CONTROL_PLANE_URL } from "./config";
+import { controlPlaneUrl } from "./config";
+import { emailNotAllowed, managed } from "./managed";
 export type { AccountSession as Session };
 
 const STORAGE_KEYS = {
@@ -10,6 +11,7 @@ const STORAGE_KEYS = {
   serverDeviceId: "clavium.account.serverDeviceId",
   clientDeviceId: "clavium.account.clientDeviceId",
   email: "clavium.account.email",
+  server: "clavium.account.server",
 };
 
 export interface AccountSession {
@@ -41,6 +43,11 @@ export function loadSession(): AccountSession | null {
   const email = localStorage.getItem(STORAGE_KEYS.email);
   const serverDeviceId = localStorage.getItem(STORAGE_KEYS.serverDeviceId);
   if (!token || !email || !serverDeviceId) return null;
+  // A session belongs to the server that issued it. If IT has since
+  // pointed this computer at another server, sign in again there.
+  // (Sessions saved before this was recorded belong to the default.)
+  const server = localStorage.getItem(STORAGE_KEYS.server);
+  if (server && server !== controlPlaneUrl()) return null;
   return { token, email, serverDeviceId };
 }
 
@@ -48,19 +55,21 @@ function saveSession(session: AccountSession) {
   localStorage.setItem(STORAGE_KEYS.token, session.token);
   localStorage.setItem(STORAGE_KEYS.email, session.email);
   localStorage.setItem(STORAGE_KEYS.serverDeviceId, session.serverDeviceId);
+  localStorage.setItem(STORAGE_KEYS.server, controlPlaneUrl());
 }
 
 function clearSession() {
   localStorage.removeItem(STORAGE_KEYS.token);
   localStorage.removeItem(STORAGE_KEYS.email);
   localStorage.removeItem(STORAGE_KEYS.serverDeviceId);
+  localStorage.removeItem(STORAGE_KEYS.server);
   // clientDeviceId is kept deliberately — it identifies this install, and
   // re-logging in should reuse (and rotate the token on) the same device
   // row rather than silently accumulating a new one every time.
 }
 
 async function apiFetch(path: string, options: RequestInit = {}) {
-  const response = await fetch(`${CONTROL_PLANE_URL}${path}`, {
+  const response = await fetch(`${controlPlaneUrl()}${path}`, {
     ...options,
     headers: { "Content-Type": "application/json", ...options.headers },
   });
@@ -83,6 +92,7 @@ function authHeader(session: AccountSession): HeadersInit {
 }
 
 export async function registerAccount(email: string, password: string): Promise<void> {
+  if (managed().disable_account_creation) throw new Error("Your organization manages Clavium accounts. Use the invite you were sent.");
   await apiFetch("/api/accounts/register/", {
     method: "POST",
     body: JSON.stringify({ email, password }),
@@ -90,6 +100,8 @@ export async function registerAccount(email: string, password: string): Promise<
 }
 
 export async function login(email: string, password: string): Promise<AccountSession> {
+  const blocked = emailNotAllowed(email);
+  if (blocked) throw new Error(blocked);
   const clientDeviceId = getOrCreateClientDeviceId();
   const data = await apiFetch("/api/accounts/devices/register/", {
     method: "POST",
@@ -154,7 +166,7 @@ export class ApiError extends Error {
 async function apiCall(session: AccountSession, method: string, path: string, body?: unknown) {
   let response: Response;
   try {
-    response = await fetch(`${CONTROL_PLANE_URL}${path}`, {
+    response = await fetch(`${controlPlaneUrl()}${path}`, {
       method,
       headers: { "Content-Type": "application/json", ...authHeader(session) },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -218,4 +230,4 @@ export function reportHealth(session: AccountSession, counts: Record<string, num
   return apiCall(session, "POST", "/api/orgs/health/", counts);
 }
 
-export { CONTROL_PLANE_URL };
+export { controlPlaneUrl };

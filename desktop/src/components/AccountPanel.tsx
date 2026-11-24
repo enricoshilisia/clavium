@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { loadSession, login, logout, registerAccount, type AccountSession } from "../account";
+import { emailNotAllowed, managed } from "../managed";
 import { forgetKeyringRevision } from "../sync";
 
 interface Props {
@@ -36,6 +37,8 @@ export default function AccountPanel({ onClose, onSessionChange, syncError }: Pr
 }
 
 export function LoggedOut({ onLoggedIn, submitLabel }: { onLoggedIn: (session: AccountSession) => void; submitLabel?: string }) {
+  const policy = managed();
+  const workDomains = policy.allowed_email_domains.map((d) => `@${d}`).join(" or ");
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -44,6 +47,11 @@ export function LoggedOut({ onLoggedIn, submitLabel }: { onLoggedIn: (session: A
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    const blocked = emailNotAllowed(email);
+    if (blocked) {
+      setError(blocked);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -62,11 +70,17 @@ export function LoggedOut({ onLoggedIn, submitLabel }: { onLoggedIn: (session: A
         Sign in to keep this vault in step across your computers and phone. Everything is encrypted on this device first;
         your account password only signs you in and is not your master password.
       </p>
+      {policy.managed && (
+        <div className="clv-notice">
+          Managed by your organization{workDomains ? `. Sign in with your work email (${workDomains})` : ""}
+          {policy.disable_account_creation ? ". New accounts come from your IT team's invite." : "."}
+        </div>
+      )}
       <div>
         <label className="clv-label" htmlFor="acc-email">
           Email
         </label>
-        <input id="acc-email" className="clv-input" type="email" value={email} onChange={(e) => setEmail(e.currentTarget.value)} required autoFocus />
+        <input id="acc-email" className="clv-input" type="email" placeholder={policy.allowed_email_domains[0] ? `name@${policy.allowed_email_domains[0]}` : undefined} value={email} onChange={(e) => setEmail(e.currentTarget.value)} required autoFocus />
       </div>
       <div>
         <label className="clv-label" htmlFor="acc-password">
@@ -86,9 +100,11 @@ export function LoggedOut({ onLoggedIn, submitLabel }: { onLoggedIn: (session: A
       <button type="submit" className="clv-btn clv-btn-primary" disabled={busy}>
         {busy ? "Working…" : submitLabel ?? (mode === "login" ? "Sign in and sync" : "Create account and sync")}
       </button>
-      <button type="button" className="clv-btn clv-btn-ghost" onClick={() => setMode(mode === "login" ? "register" : "login")}>
-        {mode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
-      </button>
+      {!policy.disable_account_creation && (
+        <button type="button" className="clv-btn clv-btn-ghost" onClick={() => setMode(mode === "login" ? "register" : "login")}>
+          {mode === "login" ? "Need an account? Create one" : "Already have an account? Sign in"}
+        </button>
+      )}
     </form>
   );
 }

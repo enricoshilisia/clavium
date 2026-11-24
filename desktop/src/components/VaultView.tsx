@@ -19,6 +19,7 @@ import type { Policy } from "../account";
 import type { CategoryInfo, KindInfo, RecordInput, VaultRecord } from "../types";
 import logo from "../assets/clavium-logo.png";
 import AccountPanel from "./AccountPanel";
+import { managed } from "../managed";
 import BrowserPanel from "./BrowserPanel";
 import RecordForm from "./RecordForm";
 import SecurityPanel from "./SecurityPanel";
@@ -333,6 +334,14 @@ export default function VaultView({ records, onRecordsChange, onLock, autoLockMi
           + New item
         </button>
         {syncNotice && <div className="clv-notice">{syncNotice}</div>}
+        {managed().require_sign_in && !session && (
+          <div className="clv-notice">
+            Your organization asks you to sign in to your work account so this vault is backed up and synced.{" "}
+            <button className="clv-btn clv-btn-ghost clv-btn-sm" onClick={() => setPanel("account")}>
+              Sign in
+            </button>
+          </div>
+        )}
         {policyNotices(policy, hasRecovery).map((n) => (
           <div key={n} className="clv-notice">
             {n}

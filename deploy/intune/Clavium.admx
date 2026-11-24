@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Clavium managed settings for Intune (Imported Administrative templates) or Group Policy.
+     Values are written to Software\Policies\Clavium (machine or user). -->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <policyNamespaces>
+    <target prefix="clavium" namespace="Clavium.Policies.Clavium" />
+  </policyNamespaces>
+  <resources minRequiredRevision="1.0" />
+  <supportedOn>
+    <definitions>
+      <definition name="SUPPORTED_ClaviumDesktop" displayName="$(string.SUPPORTED_ClaviumDesktop)" />
+    </definitions>
+  </supportedOn>
+  <categories>
+    <category name="Clavium" displayName="$(string.Clavium)" />
+  </categories>
+  <policies>
+    <policy name="ServerUrl" class="Both" displayName="$(string.ServerUrl)" explainText="$(string.ServerUrl_Explain)" presentation="$(presentation.ServerUrl)" key="Software\Policies\Clavium">
+      <parentCategory ref="Clavium" />
+      <supportedOn ref="SUPPORTED_ClaviumDesktop" />
+      <elements>
+        <text id="ServerUrlText" valueName="ServerUrl" required="true" maxLength="512" />
+      </elements>
+    </policy>
+    <policy name="AllowedEmailDomains" class="Both" displayName="$(string.AllowedEmailDomains)" explainText="$(string.AllowedEmailDomains_Explain)" presentation="$(presentation.AllowedEmailDomains)" key="Software\Policies\Clavium">
+      <parentCategory ref="Clavium" />
+      <supportedOn ref="SUPPORTED_ClaviumDesktop" />
+      <elements>
+        <text id="AllowedEmailDomainsText" valueName="AllowedEmailDomains" required="true" maxLength="1024" />
+      </elements>
+    </policy>
+    <policy name="DisableAccountCreation" class="Both" displayName="$(string.DisableAccountCreation)" explainText="$(string.DisableAccountCreation_Explain)" key="Software\Policies\Clavium" valueName="DisableAccountCreation">
+      <parentCategory ref="Clavium" />
+      <supportedOn ref="SUPPORTED_ClaviumDesktop" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="RequireSignIn" class="Both" displayName="$(string.RequireSignIn)" explainText="$(string.RequireSignIn_Explain)" key="Software\Policies\Clavium" valueName="RequireSignIn">
+      <parentCategory ref="Clavium" />
+      <supportedOn ref="SUPPORTED_ClaviumDesktop" />
+      <enabledValue><decimal value="1" /></enabledValue>
+      <disabledValue><decimal value="0" /></disabledValue>
+    </policy>
+    <policy name="MaxAutoLockMinutes" class="Both" displayName="$(string.MaxAutoLockMinutes)" explainText="$(string.MaxAutoLockMinutes_Explain)" presentation="$(presentation.MaxAutoLockMinutes)" key="Software\Policies\Clavium">
+      <parentCategory ref="Clavium" />
+      <supportedOn ref="SUPPORTED_ClaviumDesktop" />
+      <elements>
+        <decimal id="MaxAutoLockMinutesValue" valueName="MaxAutoLockMinutes" required="true" minValue="1" maxValue="1440" />
+      </elements>
+    </policy>
+  </policies>
+</policyDefinitions>

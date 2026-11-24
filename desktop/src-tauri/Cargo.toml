@@ -39,6 +39,10 @@ hex = "0.4"
 # real security property, not a cosmetic one.
 url = "2.5"
 
+[target.'cfg(windows)'.dependencies]
+# Reads the organization's managed settings (Intune / Group Policy).
+winreg = "0.55"
+
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

@@ -1,5 +1,17 @@
-// The Clavium control plane this build talks to. Fixed at build time:
-// pointing a release at the wrong server is a mistake worth catching then.
-// Self-hosted (enterprise) builds set VITE_CLAVIUM_API when building.
-export const CONTROL_PLANE_URL: string =
-  import.meta.env.VITE_CLAVIUM_API || "https://clavium-api.172-169-233-189.sslip.io";
+// The Clavium control plane this app talks to.
+//
+// Default: fixed at build time (self-hosted builds set VITE_CLAVIUM_API).
+// An organization can point its computers at its own server with the
+// ServerUrl managed setting (Intune / Group Policy, see managed.ts),
+// applied once at startup before any request is made.
+const BUILD_DEFAULT: string = import.meta.env.VITE_CLAVIUM_API || "https://clavium-api.172-169-233-189.sslip.io";
+
+let current = BUILD_DEFAULT;
+
+export function controlPlaneUrl(): string {
+  return current;
+}
+
+export function setControlPlaneUrl(url: string | null | undefined) {
+  current = (url || BUILD_DEFAULT).replace(/\/+$/, "");
+}

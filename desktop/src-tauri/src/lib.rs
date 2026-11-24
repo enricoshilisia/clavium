@@ -1,5 +1,6 @@
 mod bridge;
 mod commands;
+mod managed;
 mod state;
 
 use state::AppState;
@@ -42,6 +43,7 @@ pub fn run() {
             bridge::bridge_generate_pairing_code,
             bridge::bridge_list_paired,
             bridge::bridge_revoke_paired,
+            managed::managed_settings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
