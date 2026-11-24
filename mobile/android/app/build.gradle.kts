@@ -5,6 +5,12 @@ plugins {
 }
 
 android {
+    // Release lint crashes inside some plugins (image_picker) with this
+    // Android Gradle Plugin; tests and flutter analyze cover the code.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
     namespace = "com.clavium.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
