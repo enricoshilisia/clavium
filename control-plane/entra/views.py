@@ -261,6 +261,9 @@ def action(request, org_id):
             _audit(org, request.user, "directory.resumed", conn)
             messages.success(request, "Automatic sync resumed.")
         elif act == "disconnect":
+            from .notifications import remove_subscription
+
+            remove_subscription(conn)
             Membership.objects.filter(organization=org, entra_managed=True).update(entra_managed=False)
             _audit(org, request.user, "directory.disconnected", conn, tenant=conn.tenant_id)
             conn.delete()

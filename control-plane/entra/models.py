@@ -35,6 +35,17 @@ class DirectoryConnection(models.Model):
     # Removals the safety check stopped, waiting for an admin to approve.
     held_removals = models.JSONField(default=list, blank=True)
 
+    # Graph change notifications on /users, so a disabled or deleted
+    # account is cut off within about a minute instead of at the next
+    # scheduled sync. Microsoft echoes client_state back with every
+    # notification; only its hash is stored.
+    subscription_id = models.CharField(max_length=64, blank=True)
+    subscription_expires_at = models.DateTimeField(null=True, blank=True)
+    client_state_hash = models.CharField(max_length=64, blank=True)
+    subscription_error = models.TextField(blank=True)
+    # Set by a notification; the next timer tick (every minute) syncs.
+    sync_requested_at = models.DateTimeField(null=True, blank=True)
+
     def group_ids(self):
         return [g["id"] for g in self.groups]
 

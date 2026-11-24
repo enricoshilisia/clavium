@@ -3,6 +3,7 @@ from django.http import JsonResponse
 from django.urls import include, path
 
 from accounts.views import verify_email_page
+from entra.notifications import notify as entra_notify
 from vaults.urls import shared_vault_urlpatterns
 
 urlpatterns = [
@@ -13,6 +14,7 @@ urlpatterns = [
     path("api/vaults/", include("vaults.urls")),
     path("api/sync/", include("sync.urls")),
     path("scim/v2/", include("scim.urls")),
+    path("api/entra/notify/", entra_notify, name="entra-notify"),
     path("api/link/", include("link.urls")),
     path("console/", include("console.urls")),
     path("api/orgs/", include("orgs.urls")),

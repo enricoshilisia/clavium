@@ -5,7 +5,9 @@ Clavium follows a customer's Microsoft 365 (Entra ID) groups:
 - People in the chosen groups become members and get an invite email.
 - People who are disabled, deleted or removed from the groups lose access: shared-vault keys revoked, every device signed out, shared vaults marked for key rotation.
 - Optionally, members of an "admins" group are Clavium admins. Owners are never changed by the sync.
-- Runs every 15 minutes (systemd timer `clavium-entra-sync`), or on demand with **Sync now**.
+- **Instant offboarding:** Microsoft notifies Clavium when any account is disabled or deleted, and that person is cut off within about a minute.
+- Group membership changes are picked up at the scheduled sync every 15 minutes, or on demand with **Sync now**.
+- The systemd timer `clavium-entra-sync` ticks every minute: it renews the Microsoft subscription and syncs organizations that were notified or are due.
 
 Microsoft only ever supplies names, emails, enabled status and group membership. Vault contents never leave the user's devices, and Clavium never writes to the customer's directory.
 
@@ -54,6 +56,12 @@ In the Microsoft Entra admin center of **your own** tenant:
 
 **Disconnect** on the card stops the sync. Members stay and are managed by hand. To remove Clavium's access completely, the customer deletes the Clavium app under **Enterprise applications** in their Entra admin center.
 
+## How instant offboarding works
+
+Each connected tenant gets one Microsoft Graph subscription on `/users` (changes: updated, deleted), pointing at `https://<host>/api/entra/notify/`. It needs `CLAVIUM_PUBLIC_URL` to be a public https address; the console shows whether it is on. Subscriptions last 7 days and renew automatically two days before they expire; a missing one is recreated.
+
+A notification only tells Clavium to look now. Clavium checks the secret Microsoft echoes back (`clientState`, stored hashed) and the tenant, waits about 20 seconds so a burst of changes becomes one sync, then runs the normal sync with all the safety rules. A forged notification can at most cause an extra sync.
+
 ## How connecting is secured
 
 Microsoft's admin consent redirect says which tenant approved, but that redirect is not signed, so anyone could edit it to name another company's tenant. Clavium therefore follows it with an OpenID Connect sign-in to that tenant and redeems the code directly with Microsoft. The connection is saved only if the ID token's `tid` matches the approved tenant, and its audience and nonce match this sign-in. Both steps are tied to the browser session with one-time state and expire after 15 minutes. One tenant can feed only one Clavium organization.
@@ -62,5 +70,4 @@ Microsoft's admin consent redirect says which tenant approved, but that redirect
 
 - Signing in to Clavium with a Microsoft account (SSO). Planned next; it will reuse this app registration.
 - Mapping Microsoft groups to shared vaults.
-- Change notifications (instant sync instead of every 15 minutes).
 - Deploying the Windows app through Intune with preset server settings.

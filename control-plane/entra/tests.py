@@ -292,3 +292,124 @@ class ConnectFlowTests(TestCase):
     def test_hidden_when_not_configured(self):
         page = self.client.get(f"/console/{self.org.id}/")
         self.assertContains(page, "not set up on this Clavium server")
+
+
+class FakeSubGraph(FakeGraph):
+    def __init__(self, groups, renew_status=None):
+        super().__init__(groups)
+        self.created, self.renewed, self.deleted = [], [], []
+        self.renew_status = renew_status
+
+    def create_subscription(self, url, state, expires):
+        self.created.append((url, state))
+        return {"id": f"sub-{len(self.created)}", "expires": ""}
+
+    def renew_subscription(self, sub_id, expires):
+        if self.renew_status:
+            raise graph.GraphError("gone", status=self.renew_status)
+        self.renewed.append(sub_id)
+
+    def delete_subscription(self, sub_id):
+        self.deleted.append(sub_id)
+
+
+@override_settings(**MS)
+class NotificationTests(TestCase):
+    def setUp(self):
+        cache.clear()
+        self.owner = Account.objects.create_user("owner@contoso.com", PW)
+        self.org = Organization.objects.create(name="Contoso", created_by=self.owner)
+        Membership.objects.create(organization=self.org, account=self.owner, role=Membership.Role.OWNER)
+        self.conn = DirectoryConnection.objects.create(
+            organization=self.org, tenant_id=TENANT, status="active", groups=[{"id": "staff", "name": "Staff"}]
+        )
+
+    def subscribe(self, fake):
+        from . import notifications
+
+        self.assertEqual(notifications.ensure_subscription(self.conn, client=fake), "created")
+        url, state = fake.created[-1]
+        self.assertEqual(url, "https://api.test/api/entra/notify/")
+        return state
+
+    def notify(self, items):
+        return self.client.post("/api/entra/notify/", json.dumps({"value": items}), content_type="application/json")
+
+    def test_validation_handshake_echoes_token(self):
+        r = self.client.post("/api/entra/notify/?validationToken=abc%20123")
+        self.assertEqual((r.status_code, r.content, r["Content-Type"]), (200, b"abc 123", "text/plain"))
+
+    def test_notification_marks_due_only_with_the_right_secret(self):
+        state = self.subscribe(FakeSubGraph({}))
+        sub = self.conn.subscription_id
+        self.assertEqual(self.notify([{"subscriptionId": sub, "clientState": "wrong", "tenantId": TENANT}]).status_code, 202)
+        self.conn.refresh_from_db()
+        self.assertIsNone(self.conn.sync_requested_at)
+        self.notify([{"subscriptionId": sub, "clientState": state, "tenantId": "other-tenant"}])
+        self.conn.refresh_from_db()
+        self.assertIsNone(self.conn.sync_requested_at)
+        self.notify([{"subscriptionId": sub, "clientState": state, "tenantId": TENANT, "changeType": "updated"}])
+        self.conn.refresh_from_db()
+        first = self.conn.sync_requested_at
+        self.assertIsNotNone(first)
+        self.notify([{"subscriptionId": sub, "clientState": state, "tenantId": TENANT}])
+        self.conn.refresh_from_db()
+        self.assertEqual(self.conn.sync_requested_at, first, "a stream of changes must not postpone the sync")
+        self.assertEqual(self.client.post("/api/entra/notify/", "nope", content_type="application/json").status_code, 400)
+
+    def test_disabled_account_is_cut_off_on_the_next_tick(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        fake = FakeSubGraph({"staff": [user(1), user(2), user(3), user(4), user(5), user(6)]})
+        with mock.patch.object(graph, "client_for", return_value=fake):
+            self.assertEqual(sync.run_all(), 1)  # first sync + subscription
+            self.conn.refresh_from_db()
+            state = fake.created[0][1]
+            # Not due yet: nothing runs.
+            self.assertEqual(sync.run_all(), 0)
+            fake.groups["staff"][0] = user(1, enabled=False)
+            self.notify([{"subscriptionId": self.conn.subscription_id, "clientState": state, "tenantId": TENANT}])
+            self.assertEqual(sync.run_all(), 0, "debounced for a few seconds")
+            DirectoryConnection.objects.update(sync_requested_at=timezone.now() - timedelta(seconds=30))
+            self.assertEqual(sync.run_all(), 1)
+        self.assertFalse(Membership.objects.filter(account__email="user1@contoso.com", removed_at__isnull=True).exists())
+        self.conn.refresh_from_db()
+        self.assertIsNone(self.conn.sync_requested_at)
+
+    def test_renew_recreate_and_remove(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from . import notifications
+
+        fake = FakeSubGraph({})
+        self.subscribe(fake)
+        self.assertEqual(notifications.ensure_subscription(self.conn, client=fake), "ok")
+        later = timezone.now() + timedelta(days=6)
+        self.assertEqual(notifications.ensure_subscription(self.conn, client=fake, now=later), "renewed")
+        gone = FakeSubGraph({}, renew_status=404)
+        self.assertEqual(notifications.ensure_subscription(self.conn, client=gone, now=later + timedelta(days=6)), "created")
+        self.conn.status = "paused"
+        self.conn.save()
+        self.assertEqual(notifications.ensure_subscription(self.conn, client=gone), "removed")
+        self.assertEqual(gone.deleted, ["sub-1"])
+        self.assertEqual(self.conn.subscription_id, "")
+
+    @override_settings(CLAVIUM_PUBLIC_URL="http://127.0.0.1:8000")
+    def test_needs_a_public_https_address(self):
+        from . import notifications
+
+        self.assertIn("skipped", notifications.ensure_subscription(self.conn, client=FakeSubGraph({})))
+        self.conn.refresh_from_db()
+        self.assertEqual(self.conn.subscription_error, "no public https address")
+
+    def test_disconnect_removes_the_subscription(self):
+        fake = FakeSubGraph({})
+        self.subscribe(fake)
+        self.client.force_login(self.owner)
+        with mock.patch.object(graph, "client_for", return_value=fake):
+            self.client.post(f"/console/{self.org.id}/microsoft/action/", {"action": "disconnect"})
+        self.assertEqual(fake.deleted, ["sub-1"])

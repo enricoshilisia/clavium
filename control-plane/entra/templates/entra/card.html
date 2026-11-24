@@ -20,6 +20,12 @@
       {% if c.last_sync_at %} · last sync {{ c.last_sync_at|timesince }} ago{% endif %}</span>
     </p>
     {% if c.last_error %}<div class="msg error">{{ c.last_error }}</div>{% endif %}
+    {% if c.status != "paused" and c.groups %}
+    <p class="faint" style="margin-top:-6px">Instant offboarding:
+      {% if c.subscription_id and not c.subscription_error %}<span style="color:var(--ok)">on</span>, a disabled or deleted Microsoft account is cut off within about a minute.
+      {% elif c.subscription_error %}<span style="color:var(--gold)">not available</span> ({{ c.subscription_error|truncatechars:140 }}). People are still removed at the 15-minute sync.
+      {% else %}starting…{% endif %}</p>
+    {% endif %}
 
     {% if c.held_removals %}
     <div class="secret">
@@ -80,7 +86,7 @@
       {% endif %}
       <form class="inline" method="post" action="{% url 'entra-action' org.id %}" onsubmit="return confirm('Disconnect Microsoft 365? Members stay, but nobody is added or removed automatically any more.')">{% csrf_token %}<input type="hidden" name="action" value="disconnect"><button class="danger" type="submit">Disconnect</button></form>
     </div>
-    <p class="faint" style="margin-top:8px">Clavium checks your groups every 15 minutes. Removing someone signs them out of every device and revokes their shared-vault access.</p>
+    <p class="faint" style="margin-top:8px">Clavium checks your groups every 15 minutes, and straight away when Microsoft reports a disabled or deleted account. Removing someone signs them out of every device and revokes their shared-vault access.</p>
     {% endwith %}
   {% endif %}
 </div>

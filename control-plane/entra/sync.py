@@ -178,12 +178,24 @@ def run(conn: DirectoryConnection, *, actor=None, approve_removals=False, reques
     return summary
 
 
-def run_all(stdout=None) -> int:
+def run_all(stdout=None, force=False) -> int:
+    """One timer tick (every minute): keep subscriptions alive, and sync
+    each connection that a notification flagged or that is due anyway."""
+    from . import notifications
+
     n = 0
-    for conn in DirectoryConnection.objects.select_related("organization").exclude(status=Status.PAUSED):
-        if not conn.groups:
+    for conn in DirectoryConnection.objects.select_related("organization"):
+        sub = notifications.ensure_subscription(conn)
+        if stdout and sub not in ("ok", "not needed"):
+            stdout.write(f"{conn.organization.name}: change notifications {sub}")
+        if conn.status == Status.PAUSED or not conn.groups:
             continue
+        if not force and not notifications.is_due(conn):
+            continue
+        requested = conn.sync_requested_at
         result = run(conn)
+        # Clear only the request this run answered; a newer one stays.
+        DirectoryConnection.objects.filter(id=conn.id, sync_requested_at=requested).update(sync_requested_at=None)
         n += 1
         if stdout:
             state = result.get("error") or ("removals held for approval" if result.get("held") else "ok")

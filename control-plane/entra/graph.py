@@ -42,12 +42,15 @@ def admin_consent_url(redirect_uri: str, state: str) -> str:
     return f"{settings.CLAVIUM_MS_AUTHORITY}/organizations/v2.0/adminconsent?{q}"
 
 
-def _request(method, url, *, data=None, headers=None, timeout=20):
+def _request(method, url, *, data=None, json_body=None, headers=None, timeout=20):
     body = None
     headers = dict(headers or {})
     if data is not None:
         body = urllib.parse.urlencode(data).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded"
+    elif json_body is not None:
+        body = json.dumps(json_body).encode()
+        headers["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=body, method=method, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
@@ -100,6 +103,9 @@ class GraphClient:
         return body["access_token"]
 
     def _get(self, path_or_url: str, *, params=None, eventual=False):
+        return self._call("GET", path_or_url, params=params, eventual=eventual)
+
+    def _call(self, method, path_or_url: str, *, params=None, eventual=False, json_body=None):
         url = path_or_url if path_or_url.startswith("https://") else f"{settings.CLAVIUM_MS_GRAPH}/v1.0{path_or_url}"
         if params:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
@@ -107,8 +113,8 @@ class GraphClient:
         if eventual:
             headers["ConsistencyLevel"] = "eventual"
         for attempt in range(5):
-            status, resp_headers, body = _request("GET", url, headers=headers)
-            if status == 200:
+            status, resp_headers, body = _request(method, url, headers=headers, json_body=json_body)
+            if 200 <= status < 300:
                 return body
             if status in (429, 503, 504) and attempt < 4:
                 time.sleep(min(int(resp_headers.get("Retry-After", 2 ** attempt) or 1), 30))
@@ -167,6 +173,35 @@ class GraphClient:
             }
             for u in users
         ]
+
+
+    # ---- change notifications ----
+    def create_subscription(self, notification_url: str, client_state: str, expires_at) -> dict:
+        """Tell Microsoft to POST to `notification_url` when any user in the
+        tenant is updated (for example disabled) or deleted. Microsoft first
+        calls the URL with a validation token, which the endpoint echoes."""
+        body = self._call(
+            "POST",
+            "/subscriptions",
+            json_body={
+                "changeType": "updated,deleted",
+                "notificationUrl": notification_url,
+                "resource": "/users",
+                "expirationDateTime": expires_at.strftime("%Y-%m-%dT%H:%M:%S.0000000Z"),
+                "clientState": client_state,
+            },
+        )
+        return {"id": body["id"], "expires": body.get("expirationDateTime", "")}
+
+    def renew_subscription(self, subscription_id: str, expires_at) -> None:
+        self._call(
+            "PATCH",
+            f"/subscriptions/{urllib.parse.quote(subscription_id)}",
+            json_body={"expirationDateTime": expires_at.strftime("%Y-%m-%dT%H:%M:%S.0000000Z")},
+        )
+
+    def delete_subscription(self, subscription_id: str) -> None:
+        self._call("DELETE", f"/subscriptions/{urllib.parse.quote(subscription_id)}")
 
 
 def client_for(tenant_id: str) -> GraphClient:
